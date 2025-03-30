@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Sidebar from "@/components/sidebar";
-import { LayoutDashboard, Bell, SearchIcon } from "lucide-react";
+import { SearchIcon } from "lucide-react";
 import PatientList from "@/components/patientList";
 
 // Définition du type pour un patient
@@ -42,7 +42,7 @@ export default function Dashboard() {
       <div className="ml-[300px] pl-6 pt-13 w-full">
         <div className="flex">
           <div className="w-40 h-40 border-2 rounded-lg">
-            <img src="" alt="Profil" />
+            <img src="#" alt="Profil" />
           </div>
           <div className="ml-10 pt-3 flex flex-col">
             <span>{"user.first_name user.last_name"}</span>
