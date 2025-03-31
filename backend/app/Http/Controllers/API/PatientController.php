@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use App\Models\Patient;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
@@ -15,8 +16,7 @@ class PatientController extends Controller
      */
     public function index(): JsonResponse
     {
-        // À implémenter: récupérer les patients depuis la base de données
-        $patients = []; // Simuler des données pour l'instant
+        $patients = Patient::with('referringDoctor')->get();
         
         return response()->json([
             'success' => true,
@@ -34,17 +34,19 @@ class PatientController extends Controller
     {
         // Validation des données
         $validated = $request->validate([
-            'nom' => 'required|string|max:255',
-            'prenom' => 'required|string|max:255',
-            'age' => 'required|integer',
-            'sexe' => 'required|string|in:M,F',
-            'email' => 'required|email|max:255',
-            // Ajoutez d'autres champs selon vos besoins
+            'identifiant' => 'required|string|max:255|unique:patients',
+            'first_name' => 'required|string|max:255',
+            'last_name' => 'required|string|max:255',
+            'birth_date' => 'required|date',
+            'gender' => 'required|string|in:male,female',
+            'address' => 'nullable|string',
+            'phone' => 'nullable|string|max:20',
+            'emergency_contact' => 'nullable|string|max:255',
+            'referring_doctor_id' => 'nullable|exists:users,id',
+            'photo_url' => 'nullable|string',
         ]);
 
-        // À implémenter: enregistrer le patient dans la base de données
-        $patient = $validated; // Simuler la création pour l'instant
-        $patient['id'] = 1; // Simuler un ID
+        $patient = Patient::create($validated);
         
         return response()->json([
             'success' => true,
@@ -61,15 +63,7 @@ class PatientController extends Controller
      */
     public function show(int $id): JsonResponse
     {
-        // À implémenter: récupérer le patient depuis la base de données
-        $patient = [
-            'id' => $id,
-            'nom' => 'Exemple',
-            'prenom' => 'Patient',
-            'age' => 45,
-            'sexe' => 'M',
-            'email' => 'patient@exemple.com'
-        ]; // Simuler des données pour l'instant
+        $patient = Patient::with('referringDoctor')->findOrFail($id);
         
         return response()->json([
             'success' => true,
@@ -86,25 +80,23 @@ class PatientController extends Controller
      */
     public function update(Request $request, int $id): JsonResponse
     {
+        $patient = Patient::findOrFail($id);
+        
         // Validation des données
         $validated = $request->validate([
-            'nom' => 'sometimes|string|max:255',
-            'prenom' => 'sometimes|string|max:255',
-            'age' => 'sometimes|integer',
-            'sexe' => 'sometimes|string|in:M,F',
-            'email' => 'sometimes|email|max:255',
-            // Ajoutez d'autres champs selon vos besoins
+            'identifiant' => 'sometimes|string|max:255|unique:patients,identifiant,' . $id,
+            'first_name' => 'sometimes|string|max:255',
+            'last_name' => 'sometimes|string|max:255',
+            'birth_date' => 'sometimes|date',
+            'gender' => 'sometimes|string|in:male,female',
+            'address' => 'nullable|string',
+            'phone' => 'nullable|string|max:20',
+            'emergency_contact' => 'nullable|string|max:255',
+            'referring_doctor_id' => 'nullable|exists:users,id',
+            'photo_url' => 'nullable|string',
         ]);
 
-        // À implémenter: mettre à jour le patient dans la base de données
-        $patient = array_merge([
-            'id' => $id,
-            'nom' => 'Exemple',
-            'prenom' => 'Patient',
-            'age' => 45,
-            'sexe' => 'M',
-            'email' => 'patient@exemple.com'
-        ], $validated); // Simuler la mise à jour pour l'instant
+        $patient->update($validated);
         
         return response()->json([
             'success' => true,
@@ -121,7 +113,8 @@ class PatientController extends Controller
      */
     public function destroy(int $id): JsonResponse
     {
-        // À implémenter: supprimer le patient de la base de données
+        $patient = Patient::findOrFail($id);
+        $patient->delete();
         
         return response()->json([
             'success' => true,
