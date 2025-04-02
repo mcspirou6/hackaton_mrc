@@ -1,7 +1,46 @@
+"use client";
+
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { login } from "@/api/api";
 
 export default function Home() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+   try {
+      const response = await login({ email, password });
+      
+      // Traiter la réponse comme any pour éviter les erreurs de typage
+      const apiResponse = response as any;
+      
+      if (apiResponse.success) {
+        // Rediriger en fonction du rôle de l'utilisateur
+        if (apiResponse.user.role === 'admin') {
+          router.push('/admin');
+        } else {
+          router.push('/dashboard');
+        }
+      } else {
+        setError(apiResponse.message || "Échec de la connexion");
+      }
+    } catch (err: any) {
+      setError(err.message || "Une erreur s'est produite lors de la connexion");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-cyan-400 to-white flex flex-col">
       {/* Header */}
@@ -30,12 +69,15 @@ export default function Home() {
             Plateforme spécialisée pour les professionnels de santé dédiée au suivi et à la gestion des patients atteints de maladies rénales chroniques.
           </p>
           <div className="mt-8">
-            <Link href="/dashboard" className="bg-cyan-500 hover:bg-cyan-600 text-white font-semibold py-3 px-8 rounded-full transition-colors duration-300 inline-flex items-center">
+            <button 
+              onClick={() => document.getElementById('email')?.focus()}
+              className="bg-cyan-500 hover:bg-cyan-600 text-white font-semibold py-3 px-8 rounded-full transition-colors duration-300 inline-flex items-center"
+            >
               Commencer
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 ml-2" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
               </svg>
-            </Link>
+            </button>
           </div>
         </div>
 
@@ -46,14 +88,23 @@ export default function Home() {
             <p className="text-gray-600">Accédez à votre espace médical</p>
           </div>
           
-          <form className="space-y-6">
+          {error && (
+            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+              {error}
+            </div>
+          )}
+          
+          <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
               <input
                 type="email"
                 id="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 placeholder="docteur@exemple.fr"
+                required
               />
             </div>
             
@@ -62,8 +113,11 @@ export default function Home() {
               <input
                 type="password"
                 id="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 placeholder="••••••••"
+                required
               />
             </div>
             
@@ -88,9 +142,19 @@ export default function Home() {
             </div>
             
             <div>
-              <Link href="/dashboard" className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-cyan-600 hover:bg-cyan-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500">
-                Se connecter
-              </Link>
+              <button 
+                type="submit" 
+                disabled={loading}
+                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-cyan-600 hover:bg-cyan-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 disabled:opacity-50"
+              >
+                {loading ? "Connexion en cours..." : "Se connecter"}
+              </button>
+            </div>
+            
+            <div className="mt-4 text-center text-sm">
+              <p className="text-gray-600">
+                Utilisez l'email <span className="font-semibold">admin@mrc-app.com</span> et le mot de passe <span className="font-semibold">12345678</span> pour vous connecter en tant qu'administrateur.
+              </p>
             </div>
           </form>
         </div>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { 
   LayoutDashboard, 
   Users, 
@@ -30,26 +31,62 @@ import {
   BarChart3,
   ArrowUp,
   ArrowDown,
-  Clock
+  Clock,
+  LogOut
 } from "lucide-react";
+import { getCurrentUser, getPatients, getAppointments, getKidneyDiseaseStages, logout } from "@/api/api";
 
 // Types
+interface ApiResponse<T> {
+  success: boolean;
+  message?: string;
+  errors?: Record<string, string[]>;
+  data?: T;
+  user?: any;
+  patients?: Patient[];
+  appointments?: Appointment[];
+  stages?: KidneyDiseaseStage[];
+  token?: string;
+}
+
 interface Patient {
   id: number;
-  name: string;
-  age: number;
-  stade: "Stade 1" | "Stade 2" | "Stade 3" | "Stade 4" | "Stade 5";
-  lastVisit: string;
-  nextVisit: string;
-  status: "Stable" | "Attention" | "Critique";
+  identifiant: string;
+  first_name: string;
+  last_name: string;
+  birth_date: string;
+  gender: string;
+  address: string;
+  phone: string;
+  emergency_contact: string;
+  referring_doctor_id: number;
+  photo_url: string | null;
+  created_at: string;
+  updated_at: string;
+  age?: number;
+  status?: "Stable" | "Attention" | "Critique";
+  stade?: string;
 }
 
 interface Appointment {
   id: number;
-  patientName: string;
+  patient_id: number;
+  doctor_id: number;
+  date: string;
   time: string;
-  type: string;
-  doctor: string;
+  reason: string;
+  status: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  patient?: {
+    first_name: string;
+    last_name: string;
+  };
+  doctor?: {
+    first_name: string;
+    last_name: string;
+  };
 }
 
 interface HealthMetric {
@@ -59,20 +96,38 @@ interface HealthMetric {
   icon: React.ReactNode;
 }
 
+interface User {
+  id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string | null;
+  license_number: string | null;
+  specialization: string | null;
+  role: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface KidneyDiseaseStage {
+  id: number;
+  name: string;
+  description: string;
+  recommendations: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export default function Dashboard() {
+  const router = useRouter();
   // États
-  const [patients, setPatients] = useState<Patient[]>([
-    { id: 1, name: "Jean Dupont", age: 65, stade: "Stade 3", lastVisit: "15/03/2025", nextVisit: "15/04/2025", status: "Stable" },
-    { id: 2, name: "Marie Curie", age: 72, stade: "Stade 4", lastVisit: "20/03/2025", nextVisit: "03/04/2025", status: "Attention" },
-    { id: 3, name: "Pierre Martin", age: 58, stade: "Stade 2", lastVisit: "25/03/2025", nextVisit: "25/04/2025", status: "Stable" },
-    { id: 4, name: "Sophie Dubois", age: 67, stade: "Stade 5", lastVisit: "28/03/2025", nextVisit: "04/04/2025", status: "Critique" },
-  ]);
-  
-  const [appointments, setAppointments] = useState<Appointment[]>([
-    { id: 1, patientName: "Jean Dupont", time: "09:00-11:00", type: "Consultation", doctor: "Dr. Martin" },
-    { id: 2, patientName: "Sophie Dubois", time: "11:00-12:00", type: "Dialyse", doctor: "Dr. Legrand" },
-    { id: 3, patientName: "Marie Curie", time: "14:00-15:00", type: "Suivi", doctor: "Dr. Martin" },
-  ]);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [kidneyDiseaseStages, setKidneyDiseaseStages] = useState<KidneyDiseaseStage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   
   const [healthMetrics, setHealthMetrics] = useState<HealthMetric[]>([
     { name: "Cœur", value: 95, status: "normal", icon: <Heart className="w-6 h-6 text-red-500" /> },
@@ -84,10 +139,100 @@ export default function Dashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentMonth, setCurrentMonth] = useState("Mars 2025");
   const [selectedDay, setSelectedDay] = useState(31);
+
+  // Vérifier l'authentification et charger les données
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      router.push('/');
+      return;
+    }
+
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        
+        // Récupérer les informations de l'utilisateur connecté
+        const userResponse = await getCurrentUser() as ApiResponse<any>;
+        if (!userResponse.success) {
+          throw new Error(userResponse.message || "Échec de récupération de l'utilisateur");
+        }
+        setCurrentUser(userResponse.user);
+        
+        // Récupérer la liste des patients
+        const patientsResponse = await getPatients() as unknown as ApiResponse<Patient[]>;
+        if (!patientsResponse.success) {
+          throw new Error(patientsResponse.message || "Échec de récupération des patients");
+        }
+        
+        // Ajouter des propriétés calculées aux patients
+        const enhancedPatients = patientsResponse.patients?.map((patient: Patient) => {
+          // Calculer l'âge à partir de la date de naissance
+          const birthDate = new Date(patient.birth_date);
+          const ageDifMs = Date.now() - birthDate.getTime();
+          const ageDate = new Date(ageDifMs);
+          const age = Math.abs(ageDate.getUTCFullYear() - 1970);
+          
+          // Attribuer un statut aléatoire pour la démonstration
+          const statuses: ("Stable" | "Attention" | "Critique")[] = ["Stable", "Attention", "Critique"];
+          const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
+          
+          // Attribuer un stade aléatoire pour la démonstration
+          const stades = ["Stade 1", "Stade 2", "Stade 3", "Stade 4", "Stade 5"];
+          const randomStade = stades[Math.floor(Math.random() * stades.length)];
+          
+          return {
+            ...patient,
+            age,
+            status: randomStatus,
+            stade: randomStade
+          };
+        }) || [];
+        
+        setPatients(enhancedPatients);
+        
+        // Récupérer les rendez-vous
+        const appointmentsResponse = await getAppointments() as unknown as ApiResponse<Appointment[]>;
+        if (!appointmentsResponse.success) {
+          throw new Error(appointmentsResponse.message || "Échec de récupération des rendez-vous");
+        }
+        setAppointments(appointmentsResponse.appointments || []);
+        
+        // Récupérer les stades de maladie rénale
+        const stagesResponse = await getKidneyDiseaseStages() as unknown as ApiResponse<KidneyDiseaseStage[]>;
+        if (!stagesResponse.success) {
+          throw new Error(stagesResponse.message || "Échec de récupération des stades de maladie rénale");
+        }
+        setKidneyDiseaseStages(stagesResponse.stages || []);
+        
+      } catch (err: any) {
+        console.error("Erreur lors du chargement des données:", err);
+        setError(err.message || "Une erreur s'est produite lors du chargement des données");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [router]);
+
+  // Gérer la déconnexion
+  const handleLogout = async () => {
+    try {
+      await logout();
+      localStorage.removeItem('auth_token');
+      router.push('/');
+    } catch (error) {
+      console.error("Erreur lors de la déconnexion:", error);
+      // Même en cas d'erreur, on supprime le token et on redirige
+      localStorage.removeItem('auth_token');
+      router.push('/');
+    }
+  };
   
   // Filtrer les patients en fonction du terme de recherche
   const filteredPatients = patients.filter(patient => 
-    patient.name.toLowerCase().includes(searchTerm.toLowerCase())
+    `${patient.first_name} ${patient.last_name}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
   
   // Jours de la semaine
@@ -95,7 +240,36 @@ export default function Dashboard() {
   
   // Générer les jours du mois (simplifié)
   const daysInMonth = Array.from({ length: 31 }, (_, i) => i + 1);
-  
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Chargement des données...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50">
+        <div className="text-center max-w-md p-6 bg-white rounded-lg shadow-md">
+          <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-gray-800 mb-2">Erreur de chargement</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            Réessayer
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
@@ -158,9 +332,15 @@ export default function Dashboard() {
               <span className="font-bold">DR</span>
             </div>
             <div>
-              <p className="font-medium">Dr. Richard</p>
-              <p className="text-xs text-gray-300">Néphrologue</p>
+              <p className="font-medium">{currentUser?.first_name} {currentUser?.last_name}</p>
+              <p className="text-xs text-gray-300">{currentUser?.role}</p>
             </div>
+            <button 
+              onClick={handleLogout}
+              className="ml-auto p-2 rounded-full hover:bg-gray-100 transition-colors"
+            >
+              <LogOut className="h-5 w-5 text-gray-400" />
+            </button>
           </div>
         </div>
       </div>
@@ -375,11 +555,11 @@ export default function Dashboard() {
                       patient.status === "Attention" ? "bg-yellow-100 text-yellow-700" :
                       "bg-red-100 text-red-700"
                     }`}>
-                      {patient.name.split(' ').map(n => n[0]).join('')}
+                      {patient.first_name.split(' ').map(n => n[0]).join('')}
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
-                        <h3 className="font-medium text-gray-800">{patient.name}</h3>
+                        <h3 className="font-medium text-gray-800">{patient.first_name} {patient.last_name}</h3>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                           patient.status === "Stable" ? "bg-green-100 text-green-800" :
                           patient.status === "Attention" ? "bg-yellow-100 text-yellow-800" :
@@ -424,10 +604,10 @@ export default function Dashboard() {
                       <Clock className="h-4 w-4 text-gray-400" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-medium text-gray-800">{appointment.patientName}</h3>
+                      <h3 className="font-medium text-gray-800">{appointment.patient?.first_name} {appointment.patient?.last_name}</h3>
                       <div className="flex items-center text-sm text-gray-500 mt-1">
-                        <span className="mr-3">{appointment.type}</span>
-                        <span className="text-indigo-600">{appointment.doctor}</span>
+                        <span className="mr-3">{appointment.reason}</span>
+                        <span className="text-indigo-600">{appointment.doctor?.first_name} {appointment.doctor?.last_name}</span>
                       </div>
                     </div>
                     <div className="flex space-x-2">

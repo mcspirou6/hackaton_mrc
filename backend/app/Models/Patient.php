@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Patient extends Model
 {
@@ -43,5 +45,45 @@ class Patient extends Model
     public function referringDoctor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'referring_doctor_id');
+    }
+
+    /**
+     * Get the medical records for this patient.
+     */
+    public function patientRecords(): HasMany
+    {
+        return $this->hasMany(PatientRecord::class);
+    }
+
+    /**
+     * Get the latest medical record for this patient.
+     */
+    public function latestRecord(): HasOne
+    {
+        return $this->hasOne(PatientRecord::class)->latest();
+    }
+
+    /**
+     * Get the appointments for this patient.
+     */
+    public function appointments(): HasMany
+    {
+        return $this->hasMany(Appointment::class);
+    }
+
+    /**
+     * Get the consultations for this patient.
+     */
+    public function consultations(): HasMany
+    {
+        return $this->hasMany(Consultation::class);
+    }
+
+    /**
+     * Get the full name of the patient.
+     */
+    public function getFullNameAttribute(): string
+    {
+        return "{$this->first_name} {$this->last_name}";
     }
 }

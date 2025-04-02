@@ -74,6 +74,21 @@ interface Patient {
   gfr?: number;
 }
 
+// Fonction pour créer un patient via l'API
+const createPatient = async (patientData: any) => {
+  try {
+    // Importer la fonction createPatient de l'API
+    const { createPatient } = await import('@/api/api');
+    
+    // Utiliser la fonction importée
+    const response = await createPatient(patientData);
+    return response;
+  } catch (error) {
+    console.error('Erreur lors de la création du patient:', error);
+    return { success: false, message: 'Une erreur est survenue lors de la création du patient.' };
+  }
+};
+
 export default function Patients() {
   // États
   const [patients, setPatients] = useState<Patient[]>([
@@ -272,52 +287,83 @@ export default function Patients() {
   };
   
   // Fonction pour ajouter un nouveau patient
-  const addNewPatient = (e: React.FormEvent) => {
+  const addNewPatient = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Création d'un nouvel ID unique
-    const newId = Math.max(...patients.map(p => p.id)) + 1;
-    
-    // Création du nouveau patient avec les données du formulaire
-    const patientToAdd: Patient = {
-      id: newId,
-      identifiant: newPatient.identifiant || `PAT-00${newId}-2025`,
-      first_name: newPatient.first_name || "",
-      last_name: newPatient.last_name || "",
-      birth_date: newPatient.birth_date || "",
-      gender: newPatient.gender as "male" | "female" || "male",
-      address: newPatient.address || "",
-      phone: newPatient.phone || "",
-      emergency_contact: newPatient.emergency_contact || "",
-      referring_doctor_id: Number(newPatient.referring_doctor_id) || 1,
-      stade: newPatient.stade as "Stade 1" | "Stade 2" | "Stade 3" | "Stade 4" | "Stade 5" || "Stade 1",
-      lastVisit: newPatient.lastVisit || new Date().toLocaleDateString('fr-FR'),
-      nextVisit: newPatient.nextVisit || new Date(new Date().setMonth(new Date().getMonth() + 1)).toLocaleDateString('fr-FR'),
-      status: newPatient.status as "Stable" | "Attention" | "Critique" || "Stable",
-      url_photo: newPatient.url_photo || "",
-      bloodType: newPatient.bloodType || "O+",
-      creatinine: newPatient.creatinine || 90,
-      gfr: newPatient.gfr || 90
-    };
-    
-    // Ajout du patient à la liste
-    setPatients([...patients, patientToAdd]);
-    
-    // Réinitialisation du formulaire et fermeture
-    setNewPatient({
-      identifiant: `PAT-00${patients.length + 2}-2025`,
-      first_name: "",
-      last_name: "",
-      birth_date: "",
-      gender: "male",
-      address: "",
-      phone: "",
-      emergency_contact: "",
-      referring_doctor_id: 1,
-      stade: "Stade 1",
-      status: "Stable"
-    });
-    setShowAddPatientForm(false);
+    try {
+      // Vérifier si l'utilisateur est authentifié
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        alert("Vous devez être connecté pour ajouter un patient.");
+        return;
+      }
+      
+      // Préparation des données pour l'API
+      const patientData = {
+        identifiant: newPatient.identifiant || `PAT-00${patients.length + 2}-2025`,
+        first_name: newPatient.first_name || "",
+        last_name: newPatient.last_name || "",
+        birth_date: newPatient.birth_date || "",
+        gender: newPatient.gender as "male" | "female" || "male",
+        address: newPatient.address || "",
+        phone: newPatient.phone || "",
+        emergency_contact: newPatient.emergency_contact || "",
+        referring_doctor_id: Number(newPatient.referring_doctor_id) || 1,
+      };
+      
+      // Importer la fonction createPatient de l'API
+      const { createPatient } = await import('@/api/api');
+      
+      // Appel à l'API pour créer le patient dans la base de données
+      const response = await createPatient(patientData);
+      
+      // Traiter la réponse comme any pour éviter les erreurs de typage
+      const apiResponse = response as any;
+      
+      if (apiResponse && apiResponse.success) {
+        // Création du nouveau patient avec les données du formulaire et la réponse de l'API
+        const patientToAdd: Patient = {
+          id: apiResponse.data.id || Math.max(...patients.map(p => p.id)) + 1,
+          ...patientData,
+          stade: newPatient.stade as "Stade 1" | "Stade 2" | "Stade 3" | "Stade 4" | "Stade 5" || "Stade 1",
+          lastVisit: newPatient.lastVisit || new Date().toLocaleDateString('fr-FR'),
+          nextVisit: newPatient.nextVisit || new Date(new Date().setMonth(new Date().getMonth() + 1)).toLocaleDateString('fr-FR'),
+          status: newPatient.status as "Stable" | "Attention" | "Critique" || "Stable",
+          url_photo: newPatient.url_photo || "",
+          bloodType: newPatient.bloodType || "O+",
+          creatinine: newPatient.creatinine || 90,
+          gfr: newPatient.gfr || 90
+        };
+        
+        // Ajout du patient à la liste
+        setPatients([...patients, patientToAdd]);
+        
+        // Réinitialisation du formulaire et fermeture
+        setNewPatient({
+          identifiant: `PAT-00${patients.length + 2}-2025`,
+          first_name: "",
+          last_name: "",
+          birth_date: "",
+          gender: "male",
+          address: "",
+          phone: "",
+          emergency_contact: "",
+          referring_doctor_id: 1,
+          stade: "Stade 1",
+          status: "Stable"
+        });
+        setShowAddPatientForm(false);
+        
+        // Message de succès
+        alert("Patient ajouté avec succès !");
+      } else {
+        // Gestion des erreurs de l'API
+        alert(`Erreur lors de l'ajout du patient: ${apiResponse?.message || "Une erreur est survenue"}`);
+      }
+    } catch (error) {
+      console.error("Erreur lors de l'ajout du patient:", error);
+      alert("Une erreur est survenue lors de l'ajout du patient. Veuillez réessayer.");
+    }
   };
 
   return (
@@ -680,7 +726,7 @@ export default function Patients() {
                         <Folder className="h-4 w-4 text-indigo-600 mr-1" />
                         Stade MRC
                       </p>
-                      <span className={`px-2 py-1 inline-flex text-sm leading-5 font-semibold rounded-full ${
+                      <span className={`px-2 inline-flex text-sm leading-5 font-semibold rounded-full ${
                         selectedPatient.stade === "Stade 1" ? "bg-green-100 text-green-800" :
                         selectedPatient.stade === "Stade 2" ? "bg-green-100 text-green-800" :
                         selectedPatient.stade === "Stade 3" ? "bg-yellow-100 text-yellow-800" :
@@ -705,6 +751,27 @@ export default function Patients() {
                       </span>
                     </div>
                     
+                    <div className="flex items-center mb-2">
+                      <div className="w-1/2">
+                        <p className="text-sm font-medium text-gray-500 flex items-center">
+                          <Activity className="h-4 w-4 text-indigo-600 mr-1" />
+                          Créatinine
+                        </p>
+                        <p className="text-sm font-semibold">
+                          {selectedPatient.creatinine !== undefined ? `${selectedPatient.creatinine} µmol/L` : 'Non disponible'}
+                        </p>
+                      </div>
+                      <div className="w-1/2">
+                        <p className="text-sm font-medium text-gray-500 flex items-center">
+                          <Activity className="h-4 w-4 text-indigo-600 mr-1" />
+                          DFG (GFR)
+                        </p>
+                        <p className="text-sm font-semibold">
+                          {selectedPatient.gfr !== undefined ? `${selectedPatient.gfr} mL/min/1.73m²` : 'Non disponible'}
+                        </p>
+                      </div>
+                    </div>
+                    
                     <div>
                       <p className="text-sm text-gray-500 flex items-center">
                         <Droplets className="h-4 w-4 text-red-500 mr-1" />
@@ -719,10 +786,12 @@ export default function Patients() {
                         Créatinine (μmol/L)
                       </p>
                       <div className="flex items-center">
-                        <span className="text-lg font-medium">{selectedPatient.creatinine}</span>
-                        <span className="ml-2 text-xs text-gray-500">
-                          {selectedPatient.creatinine > 120 ? "(Élevée)" : "(Normale)"}
-                        </span>
+                        <span className="text-lg font-medium">{selectedPatient.creatinine !== undefined ? selectedPatient.creatinine : 'Non disponible'}</span>
+                        {selectedPatient.creatinine !== undefined && (
+                          <span className="ml-2 text-xs text-gray-500">
+                            {selectedPatient.creatinine > 120 ? "(Élevée)" : "(Normale)"}
+                          </span>
+                        )}
                       </div>
                     </div>
                     
@@ -732,10 +801,12 @@ export default function Patients() {
                         DFG (mL/min/1.73m²)
                       </p>
                       <div className="flex items-center">
-                        <span className="text-lg font-medium">{selectedPatient.gfr}</span>
-                        <span className="ml-2 text-xs text-gray-500">
-                          {selectedPatient.gfr < 60 ? "(Réduit)" : "(Normal)"}
-                        </span>
+                        <span className="text-lg font-medium">{selectedPatient.gfr !== undefined ? selectedPatient.gfr : 'Non disponible'}</span>
+                        {selectedPatient.gfr !== undefined && (
+                          <span className="ml-2 text-xs text-gray-500">
+                            {selectedPatient.gfr < 60 ? "(Réduit)" : "(Normal)"}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -962,7 +1033,7 @@ export default function Patients() {
                         </div>
                         <div className="flex items-center">
                           <input type="radio" name="tumeur" id="t2b" className="mr-1" />
-                          <label htmlFor="t2b" className="text-sm">T2b (>10cm)</label>
+                          <label htmlFor="t2b" className="text-sm">T2b ({'>'}10cm)</label>
                         </div>
                         <div className="flex items-center">
                           <input type="radio" name="tumeur" id="t3" className="mr-1" />
