@@ -52,4 +52,11 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
+
+    public function patients()
+    {
+        return $this->hasMany(Patient::class, 'referring_doctor_id');
+    }
+
+
 }

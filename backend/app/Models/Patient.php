@@ -39,6 +39,7 @@ class Patient extends Model
         'birth_date' => 'date',
     ];
 
+
     /**
      * Get the referring doctor for this patient.
      */
