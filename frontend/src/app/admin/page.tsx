@@ -29,6 +29,7 @@ import {
   updateDoctor, 
   deleteDoctor, 
   resetDoctorPassword, 
+  getDoctorStatistics,
   logout 
 } from "@/api/api";
 
@@ -42,7 +43,7 @@ interface Doctor {
   license_number: string;
   specialization: string;
   role: string;
-  status: string;
+  status: 'actif' | 'desactive' | 'suspendu';
   created_at: string;
   updated_at: string;
   patients_count: number;
@@ -84,10 +85,11 @@ interface NewDoctorData {
   specialization: string;
   password: string;
   password_confirmation: string;
+  role: string;
   status: string;
 }
 
-interface ApiResponse<T> {
+interface ApiResponse<T = any> {
   success: boolean;
   message?: string;
   errors?: Record<string, string[]>;
@@ -95,6 +97,20 @@ interface ApiResponse<T> {
   user?: any;
   doctors?: Doctor[];
   token?: string;
+}
+interface StatisticsData {
+  total_doctors: number;
+  active_doctors: number;
+  desactive_doctors: number;
+  suspendu_doctors: number;
+  total_patients: number;
+  average_patients_per_doctor: number;
+}
+
+interface DoctorsResponse {
+  success: boolean;
+  message?: string; // Rend la propriété optionnelle
+  doctors?: Doctor[];
 }
 
 // Mock data for login history (à remplacer par des données réelles plus tard)
@@ -167,11 +183,22 @@ export default function AdminPage() {
   
   // State for doctors
   const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [loadingDoctors, setLoadingDoctors] = useState(true);
   const [filteredDoctors, setFilteredDoctors] = useState<Doctor[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortField, setSortField] = useState<keyof Doctor>('first_name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [sortedDoctors, setSortedDoctors] = useState<Doctor[]>([]);
+
+   const [statistics, setStatistics] = useState({
+    total_doctors: 0,
+    active_doctors: 0,
+    desactive_doctors: 0,
+    suspendu_doctors: 0,
+    total_patients: 0,
+    average_patients_per_doctor: 0,
+  });
+
   
   // State for login history
   const [loginHistory, setLoginHistory] = useState<LoginHistory[]>(mockLoginHistory);
@@ -192,14 +219,86 @@ export default function AdminPage() {
     specialization: '',
     password: '',
     password_confirmation: '',
-    status: 'active'
+    role: 'medecin',
+    status: 'actif'
   });
   const [newPassword, setNewPassword] = useState('');
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [successMessage, setSuccessMessage] = useState('');
+
+  // Fonction pour charger les statistiques
+    const loadStatistics = async () => {
+      try {
+        const response = await getDoctorStatistics();
+        
+        if (response.success && response.data) {
+          setStatistics({
+            total_doctors: response.data.total_doctors,
+            active_doctors: response.data.active_doctors,
+            desactive_doctors: response.data.desactive_doctors,
+            suspendu_doctors: response.data.suspendu_doctors,
+            total_patients: response.data.total_patients,
+            average_patients_per_doctor: response.data.average_patients_per_doctor,
+          });
+        } else {
+          console.error('Erreur:', response.message);
+        }
+      } catch (error) {
+        console.error('Erreur de chargement:', error);
+      }
+    };
+
+    // Fonction pour charger les médecins
+    const loadDoctors = async () => {
+      try {
+        setLoadingDoctors(true);
+        const response = await getDoctors();
+        
+        if (response.success && response.data) {
+          setDoctors(response.data);
+        } else {
+          throw new Error(response.message || 'Réponse API invalide');
+        }
+      } catch (error) {
+        // Méthode 1: Vérification explicite
+        if (error instanceof Error) {
+          console.error('Erreur détaillée:', error.message);
+          setError(error.message);
+        } else {
+          console.error('Erreur inconnue:', error);
+          setError('Une erreur inconnue est survenue');
+        }
+    
+        // Méthode 2: Conversion en Error
+        const err = error as Error;
+        console.error('Erreur:', err.message);
+        setError(err.message || 'Erreur lors du chargement');
+        
+        // Méthode 3: Utilisation d'un type personnalisé
+        interface ApiError {
+          message?: string;
+          response?: {
+            status?: number;
+            data?: {
+              message?: string;
+            };
+          };
+        }
+        const apiError = error as ApiError;
+        setError(
+          apiError.message || 
+          apiError.response?.data?.message || 
+          'Erreur API inconnue'
+        );
+      } finally {
+        setLoadingDoctors(false);
+      }
+    };
   
-  // Vérifier l'authentification et charger les données
-  useEffect(() => {
+   // Vérifier l'authentification et charger les données
+   useEffect(() => {
+    loadStatistics();
+    loadDoctors();
     const token = localStorage.getItem('auth_token');
     if (!token) {
       router.push('/');
@@ -288,12 +387,7 @@ export default function AdminPage() {
       router.push('/');
     }
   };
-  
-  // Calculate statistics
-  const totalDoctors = doctors.length;
-  const activeDoctors = doctors.filter(doctor => doctor.status === 'active').length;
-  const totalPatients = doctors.reduce((sum, doctor) => sum + (doctor.patients_count || 0), 0);
-  const averagePatientsPerDoctor = totalDoctors > 0 ? Math.round(totalPatients / totalDoctors) : 0;
+
   
   // Handle search
   useEffect(() => {
@@ -376,7 +470,7 @@ export default function AdminPage() {
       // Appel API pour créer un médecin
       const response = await createDoctor({
         ...newDoctorData,
-        role: 'doctor'
+        role: 'medecin'
       });
       
       // Traiter la réponse comme any pour éviter les erreurs de typage
@@ -391,7 +485,10 @@ export default function AdminPage() {
         return;
       }
       
-      // Ajouter le nouveau médecin à la liste
+      // 1. Définissez un type pour le statut (si ce n'est pas déjà fait)
+      type DoctorStatus = "actif" | "desactive" | "suspendu";
+
+      // 2. Modifiez votre code comme suit :
       const newDoctor: Doctor = {
         id: apiResponse.data.id,
         first_name: newDoctorData.first_name || '',
@@ -400,8 +497,10 @@ export default function AdminPage() {
         phone: newDoctorData.phone || '',
         license_number: newDoctorData.license_number || '',
         specialization: newDoctorData.specialization || '',
-        role: 'doctor',
-        status: newDoctorData.status || 'actif',
+        role: newDoctorData.role || 'medecin',
+        status: (["actif", "desactive", "suspendu"].includes(newDoctorData.status) 
+          ? newDoctorData.status 
+          : 'actif') as DoctorStatus, // Conversion de type sûre
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         patients_count: 0,
@@ -422,7 +521,8 @@ export default function AdminPage() {
         specialization: '',
         password: '',
         password_confirmation: '',
-        status: 'active'
+        role: 'medecin',
+        status: 'actif'
       });
       
       // Masquer le message de succès après 3 secondes
@@ -437,65 +537,52 @@ export default function AdminPage() {
   
   // Handle update doctor
   const handleUpdateDoctor = async () => {
-    if (!selectedDoctor) return;
-    
+    // Vérification initiale
+    if (!selectedDoctor || !newDoctorData) {
+      setFormErrors({ general: 'Aucun médecin sélectionné' });
+      return;
+    }
+  
     try {
       setFormErrors({});
       
       // Validation
       const errors: Record<string, string> = {};
-      if (!selectedDoctor.first_name) errors.first_name = "Le prénom est requis";
-      if (!selectedDoctor.last_name) errors.last_name = "Le nom est requis";
-      if (!selectedDoctor.email) errors.email = "L'email est requis";
-      if (!selectedDoctor.email.includes('@')) errors.email = "L'email n'est pas valide";
-      if (!selectedDoctor.specialization) errors.specialization = "La spécialisation est requise";
-      if (!selectedDoctor.license_number) errors.license_number = "Le numéro de licence est requis";
-      
+      if (!newDoctorData.first_name) errors.first_name = "Prénom requis";
+      if (!newDoctorData.last_name) errors.last_name = "Nom requis";
+      if (!newDoctorData.email?.includes('@')) errors.email = "Email invalide";
+  
       if (Object.keys(errors).length > 0) {
         setFormErrors(errors);
         return;
       }
-      
-      // Appel API pour mettre à jour un médecin
+  
+      // Appel API avec vérification de selectedDoctor
       const response = await updateDoctor(selectedDoctor.id, {
-        first_name: selectedDoctor.first_name,
-        last_name: selectedDoctor.last_name,
-        email: selectedDoctor.email,
-        phone: selectedDoctor.phone,
-        license_number: selectedDoctor.license_number,
-        specialization: selectedDoctor.specialization,
-        status: selectedDoctor.status
-      }) as ApiResponse<Doctor>;
+        first_name: newDoctorData.first_name,
+        last_name: newDoctorData.last_name,
+        email: newDoctorData.email,
+        phone: newDoctorData.phone ?? null,
+        license_number: newDoctorData.license_number ?? null,
+        specialization: newDoctorData.specialization ?? null,
+        status: newDoctorData.status || 'actif',
+        role: newDoctorData.role || 'medecin'
+      });
+  
+      // Mise à jour de l'état
+      setDoctors(prev => prev.map(doc => 
+        doc.id === selectedDoctor!.id 
+          ? { ...doc, ...(response as ApiResponse<Doctor>).data! } 
+          : doc
+      ));
       
-      if (response.success) {
-        // Mettre à jour la liste des médecins
-        const updatedDoctors = doctors.map(doctor => 
-          doctor.id === selectedDoctor.id ? { ...doctor, ...response.data } : doctor
-        );
-        
-        setDoctors(updatedDoctors);
-        setIsEditDoctorModalOpen(false);
-        setSuccessMessage("Médecin mis à jour avec succès");
-        
-        // Masquer le message de succès après 3 secondes
-        setTimeout(() => {
-          setSuccessMessage('');
-        }, 3000);
-      } else {
-        // Gérer les erreurs de validation du serveur
-        if (response.errors && typeof response.errors === 'object') {
-          const errors: Record<string, string> = {};
-          Object.keys(response.errors).forEach(key => {
-            errors[key] = response.errors?.[key][0] || "Erreur de validation";
-          });
-          setFormErrors(errors);
-        } else {
-          setFormErrors({ general: response.message || "Erreur lors de la mise à jour du médecin" });
-        }
-      }
-    } catch (error: any) {
-      console.error("Erreur lors de la mise à jour du médecin:", error);
-      setFormErrors({ general: error.message || "Une erreur s'est produite" });
+      setIsEditDoctorModalOpen(false);
+      setSuccessMessage('Médecin mis à jour');
+      
+    } catch (error) {
+      setFormErrors({
+        general: error instanceof Error ? error.message : 'Erreur inconnue'
+      });
     }
   };
   
@@ -683,9 +770,13 @@ export default function AdminPage() {
                   <div className="p-2 bg-indigo-100 rounded-lg">
                     <Users className="h-6 w-6 text-indigo-600" />
                   </div>
-                </div>
-                <p className="text-3xl font-bold text-gray-800">{totalDoctors}</p>
-                <p className="text-sm text-gray-500 mt-2">{activeDoctors} actifs, {totalDoctors - activeDoctors} inactifs</p>
+                </div> 
+                <p className="text-3xl font-bold text-gray-800">{statistics.total_doctors}</p>
+                <p className="text-sm text-gray-500 mt-2">
+                  {statistics.active_doctors} actifs, {statistics.desactive_doctors} inactifs, {statistics.suspendu_doctors} suspendu
+                </p>
+                {/* <p className="text-3xl font-bold text-gray-800">{totalDoctors}</p>
+                <p className="text-sm text-gray-500 mt-2">{activeDoctors} actifs, {desactiveDoctors} inactifs</p> */}
               </div>
               
               <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
@@ -695,8 +786,8 @@ export default function AdminPage() {
                     <Activity className="h-6 w-6 text-green-600" />
                   </div>
                 </div>
-                <p className="text-3xl font-bold text-gray-800">{totalPatients}</p>
-                <p className="text-sm text-gray-500 mt-2">Moy. {averagePatientsPerDoctor} patients par médecin</p>
+                <p className="text-3xl font-bold text-gray-800">{statistics.total_patients}</p>
+                <p className="text-sm text-gray-500 mt-2">Moy. {statistics.average_patients_per_doctor} patients par médecin</p>
               </div>
               
               <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
@@ -759,7 +850,7 @@ export default function AdminPage() {
                 <h2 className="text-lg font-medium text-gray-800 mb-4">Médecins récemment actifs</h2>
                 <div className="space-y-4">
                   {sortedDoctors
-                    .filter(doctor => doctor.status === 'active')
+                    .filter(doctor => doctor.status === 'actif')
                     .sort((a, b) => {
                       if (!a.last_login) return 1;
                       if (!b.last_login) return -1;
@@ -794,6 +885,7 @@ export default function AdminPage() {
             </div>
           </div>
         )}
+
         
         {/* Doctors Management */}
         {activeTab === 'doctors' && (
@@ -831,7 +923,8 @@ export default function AdminPage() {
                       specialization: "",
                       password: "",
                       password_confirmation: "",
-                      status: "active"
+                      role: "medecin",
+                      status: "actif",
                     });
                     setIsAddDoctorModalOpen(true);
                   }}
@@ -929,14 +1022,7 @@ export default function AdminPage() {
                       <tr key={doctor.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
-                            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center mr-3">
-                              <span className="font-medium text-indigo-600">
-                                {doctor.first_name.charAt(0)}{doctor.last_name.charAt(0)}
-                              </span>
-                            </div>
-                            <div>
                               <p className="font-medium text-gray-800">{doctor.first_name} {doctor.last_name}</p>
-                            </div>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -949,8 +1035,8 @@ export default function AdminPage() {
                           {doctor.patients_count}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 text-xs rounded-full ${doctor.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                            {doctor.status === 'active' ? 'Actif' : 'Inactif'}
+                          <span className={`px-2 py-1 text-xs rounded-full ${doctor.status === 'actif' ? 'bg-green-100 text-green-800' : doctor.status === 'desactive' ? 'bg-gray-100 text-gray-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                            {doctor.status === 'actif' ? 'Actif' : doctor.status === 'desactive' ? 'Désactivé':'Suspendu'}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -980,6 +1066,7 @@ export default function AdminPage() {
                                   specialization: doctor.specialization,
                                   password: '',
                                   password_confirmation: '',
+                                  role: doctor.role,
                                   status: doctor.status
                                 });
                                 setIsEditDoctorModalOpen(true);
@@ -1004,9 +1091,25 @@ export default function AdminPage() {
                 </table>
               </div>
               
-              {sortedDoctors.length === 0 && (
-                <div className="text-center py-8">
-                  <p className="text-gray-500">Aucun médecin trouvé</p>
+              {/* Message vide */}
+            {sortedDoctors.length === 0 && !loadingDoctors && (
+              <div className="text-center py-8 col-span-full">
+                <p className="text-gray-500">Aucun médecin trouvé</p>
+                
+                <button 
+                  onClick={() => loadDoctors()}
+                  className="mt-2 text-indigo-600 hover:text-indigo-800 text-sm font-medium"
+                >
+                  Réessayer
+                </button>
+              </div>
+            )}
+
+              {/* Loading state */}
+              {loadingDoctors && (
+                <div className="text-center py-8 col-span-full">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-600"></div>
+                  <p className="mt-2 text-gray-500">Chargement des médecins...</p>
                 </div>
               )}
             </div>
@@ -1165,21 +1268,21 @@ export default function AdminPage() {
               
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Prénom</label>
-                  <input 
-                    type="text" 
-                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    value={newDoctorData.first_name}
-                    onChange={(e) => setNewDoctorData({...newDoctorData, first_name: e.target.value})}
-                  />
-                </div>
-                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Nom</label>
                   <input 
                     type="text" 
                     className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     value={newDoctorData.last_name}
                     onChange={(e) => setNewDoctorData({...newDoctorData, last_name: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Prénom</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={newDoctorData.first_name}
+                    onChange={(e) => setNewDoctorData({...newDoctorData, first_name: e.target.value})}
                   />
                 </div>
                 <div>
@@ -1241,10 +1344,13 @@ export default function AdminPage() {
                   <select 
                     className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     value={newDoctorData.status}
-                    onChange={(e) => setNewDoctorData({...newDoctorData, status: e.target.value as "active" | "inactive"})}
+                    onChange={(e) => setNewDoctorData({...newDoctorData, status: e.target.value as "actif" | "desactive" | "suspendu"})}
                   >
-                    <option value="active">Actif</option>
-                    <option value="inactive">Inactif</option>
+                    <option value="actif">Actif</option>
+                    <option value="desactive">Inactif</option>
+                    <option value="suspendu">Suspendu</option>
+                    
+                    
                   </select>
                 </div>
               </div>
@@ -1272,7 +1378,7 @@ export default function AdminPage() {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl shadow-lg max-w-md w-full p-6 max-h-[90vh] overflow-y-scroll">
               <div className="flex justify-between items-center mb-6 sticky top-0 bg-white pt-2">
-                <h2 className="text-xl font-bold text-gray-800">Modifier un médecin</h2>
+                <h2 className="text-xl font-bold text-gray-800">Modifier un médecin </h2>
                 <button 
                   className="text-gray-500 hover:text-gray-700"
                   onClick={() => setIsEditDoctorModalOpen(false)}
@@ -1289,21 +1395,21 @@ export default function AdminPage() {
               
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Prénom</label>
-                  <input 
-                    type="text" 
-                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    value={newDoctorData.first_name}
-                    onChange={(e) => setNewDoctorData({...newDoctorData, first_name: e.target.value})}
-                  />
-                </div>
-                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Nom</label>
                   <input 
                     type="text" 
                     className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     value={newDoctorData.last_name}
                     onChange={(e) => setNewDoctorData({...newDoctorData, last_name: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Prénom</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={newDoctorData.first_name}
+                    onChange={(e) => setNewDoctorData({...newDoctorData, first_name: e.target.value})}
                   />
                 </div>
                 <div>
@@ -1347,10 +1453,12 @@ export default function AdminPage() {
                   <select 
                     className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     value={newDoctorData.status}
-                    onChange={(e) => setNewDoctorData({...newDoctorData, status: e.target.value as "active" | "inactive"})}
+                    onChange={(e) => setNewDoctorData({...newDoctorData, status: e.target.value as "actif" | "desactive" | "suspendu"})}
                   >
-                    <option value="active">Actif</option>
-                    <option value="inactive">Inactif</option>
+                    <option value="actif">Actif</option>
+                    <option value="desactive">Inactif</option>
+                    <option value="suspendu">Suspendu</option>
+                    
                   </select>
                 </div>
               </div>
@@ -1364,6 +1472,7 @@ export default function AdminPage() {
                 </button>
                 <button 
                   className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                  disabled={!selectedDoctor} // Désactive si null
                   onClick={handleUpdateDoctor}
                 >
                   Enregistrer
@@ -1444,8 +1553,8 @@ export default function AdminPage() {
                   <h3 className="text-lg font-medium text-gray-800">{selectedDoctor.first_name} {selectedDoctor.last_name}</h3>
                   <p className="text-sm text-gray-500">{selectedDoctor.specialization}</p>
                   <div className="mt-2">
-                    <span className={`px-2 py-1 text-xs rounded-full ${selectedDoctor.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                      {selectedDoctor.status === 'active' ? 'Actif' : 'Inactif'}
+                    <span className={`px-2 py-1 text-xs rounded-full ${selectedDoctor.status === 'actif' ? 'bg-green-100 text-green-800' : selectedDoctor.status === 'desactive' ? 'bg-gray-100 text-gray-800' : 'bg-yellow-100 text-yellow-800' }`}>
+                      {selectedDoctor.status === 'actif' ? 'Actif' : selectedDoctor.status === 'desactive' ? 'Désactivé':'Suspendu'}
                     </span>
                   </div>
                 </div>
@@ -1531,6 +1640,7 @@ export default function AdminPage() {
                       specialization: selectedDoctor.specialization,
                       password: '',
                       password_confirmation: '',
+                      role: selectedDoctor.role,
                       status: selectedDoctor.status
                     });
                     setIsEditDoctorModalOpen(true);

@@ -125,13 +125,15 @@ export async function changePassword(passwordData) {
 
 // ===== MÉDECINS =====
 
+
 /**
  * Récupère la liste des médecins
- * @returns {Promise<Array>} Liste des médecins
+ * @returns {Promise<{success: boolean, message?: string, data?: Doctor[]}>}
  */
 export async function getDoctors() {
   return fetchAPI('doctors', {}, true);
 }
+
 
 /**
  * Récupère les détails d'un médecin
@@ -160,13 +162,30 @@ export async function createDoctor(doctorData) {
  * @param {Object} doctorData - Nouvelles données du médecin
  * @returns {Promise<Object>} Médecin mis à jour
  */
-export async function updateDoctor(id, doctorData) {
-  return fetchAPI(`users/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(doctorData),
-  }, true);
-}
-
+  export async function updateDoctor(id, doctorData) {
+    try {
+      console.log('Envoi au backend:', { id, doctorData }); // Debug
+      
+      const response = await fetch(`${API_BASE_URL}/users/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        },
+        body: JSON.stringify(doctorData)
+      });
+  
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Échec de la mise à jour');
+      }
+  
+      return await response.json();
+    } catch (error) {
+      console.error('Erreur updateDoctor:', error);
+      throw error;
+    }
+  }
 /**
  * Supprime un médecin
  * @param {number} id - ID du médecin
@@ -193,10 +212,23 @@ export async function resetDoctorPassword(id, passwordData) {
 
 /**
  * Récupère les statistiques des médecins
- * @returns {Promise<Object>} Statistiques
  */
+/**
+ * @returns {Promise<{
+*   success: boolean,
+*   message?: string,
+*   data?: {
+*     total_doctors: number,
+*     active_doctors: number,
+*     desactive_doctors: number,
+*     suspendu_doctors: number,
+*     total_patients: number,
+*     average_patients_per_doctor: number
+*   }
+* }>}
+*/
 export async function getDoctorStatistics() {
-  return fetchAPI('doctors/statistics', {}, true);
+ return fetchAPI('doctors/statistics', {}, true);
 }
 
 // ===== PATIENTS =====
