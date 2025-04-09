@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import Link from "next/link";
 import { 
   LayoutDashboard, 
@@ -14,7 +16,6 @@ import {
   ChevronLeft, 
   ChevronRight,
   Stethoscope,
-  Clock,
   Plus,
   Filter,
   ArrowUpDown,
@@ -22,10 +23,55 @@ import {
   XCircle,
   Edit,
   Trash2,
-  CalendarClock
+  CalendarClock,
+  X,
+  Eye
 } from "lucide-react";
+import {
+  getAppointments,
+  createAppointment,
+  updateAppointment,
+  deleteAppointment,
+  getPatients,
+  getDoctors
+} from "@/api/api";
 
-// Types
+// Types pour les réponses de l'API
+interface AppointmentResponse {
+  id: number;
+  patientName: string;
+  patientId: number;
+  date: string;
+  time: string;
+  duration: string;
+  type: string;
+  doctor: string;
+  status: string;
+  notes?: string;
+  patient: {
+    phone: string;
+    status: string;
+  };
+}
+
+interface PatientResponse {
+  id: number;
+  first_name: string;
+  last_name: string;
+  age: number;
+  stade: string;
+  status: string;
+  phone: string;
+}
+
+interface DoctorResponse {
+  id: number;
+  name: string;
+  specialty: string;
+  color?: string;
+}
+
+// Types pour le composant
 interface Appointment {
   id: number;
   patientName: string;
@@ -37,11 +83,16 @@ interface Appointment {
   doctor: string;
   status: "Planifié" | "Confirmé" | "Annulé" | "Terminé";
   notes?: string;
+  patient: {
+    phone: string;
+    status: string;
+  };
 }
 
 interface Patient {
   id: number;
-  name: string;
+  first_name: string;
+  last_name: string;
   age: number;
   stade: string;
   status: string;
@@ -57,71 +108,197 @@ interface Doctor {
 
 export default function Appointments() {
   // États
-  const [appointments, setAppointments] = useState<Appointment[]>([
-    { id: 1, patientName: "Jean Dupont", patientId: 1, date: "31/03/2025", time: "09:00", duration: "30 min", type: "Consultation", doctor: "Dr. Martin", status: "Planifié" },
-    { id: 2, patientName: "Sophie Dubois", patientId: 4, date: "31/03/2025", time: "11:00", duration: "60 min", type: "Dialyse", doctor: "Dr. Legrand", status: "Confirmé" },
-    { id: 3, patientName: "Marie Curie", patientId: 2, date: "31/03/2025", time: "14:00", duration: "45 min", type: "Suivi", doctor: "Dr. Martin", status: "Confirmé" },
-    { id: 4, patientName: "Pierre Martin", patientId: 3, date: "01/04/2025", time: "10:00", duration: "30 min", type: "Consultation", doctor: "Dr. Martin", status: "Planifié" },
-    { id: 5, patientName: "Jean Dupont", patientId: 1, date: "15/04/2025", time: "09:30", duration: "30 min", type: "Suivi", doctor: "Dr. Martin", status: "Planifié" },
-    { id: 6, patientName: "Sophie Dubois", patientId: 4, date: "04/04/2025", time: "11:00", duration: "60 min", type: "Dialyse", doctor: "Dr. Legrand", status: "Planifié" },
-    { id: 7, patientName: "Marie Curie", patientId: 2, date: "03/04/2025", time: "15:30", duration: "30 min", type: "Consultation", doctor: "Dr. Dubois", status: "Planifié" },
-    { id: 8, patientName: "Pierre Martin", patientId: 3, date: "25/04/2025", time: "14:00", duration: "45 min", type: "Suivi", doctor: "Dr. Martin", status: "Planifié" },
-  ]);
-  
-  const [patients, setPatients] = useState<Patient[]>([
-    { id: 1, name: "Jean Dupont", age: 65, stade: "Stade 3", status: "Stable", phone: "06 12 34 56 78" },
-    { id: 2, name: "Marie Curie", age: 72, stade: "Stade 4", status: "Attention", phone: "06 23 45 67 89" },
-    { id: 3, name: "Pierre Martin", age: 58, stade: "Stade 2", status: "Stable", phone: "06 34 56 78 90" },
-    { id: 4, name: "Sophie Dubois", age: 67, stade: "Stade 5", status: "Critique", phone: "06 45 67 89 01" },
-  ]);
-  
-  const [doctors, setDoctors] = useState<Doctor[]>([
-    { id: 1, name: "Dr. Martin", specialty: "Néphrologue", color: "#4f46e5" },
-    { id: 2, name: "Dr. Legrand", specialty: "Néphrologue", color: "#0891b2" },
-    { id: 3, name: "Dr. Dubois", specialty: "Cardiologue", color: "#16a34a" },
-  ]);
-  
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentView, setCurrentView] = useState<"list" | "calendar">("list");
-  const [selectedDate, setSelectedDate] = useState<string>("31/03/2025");
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterDoctor, setFilterDoctor] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
+  const [showAppointmentForm, setShowAppointmentForm] = useState(false);
+  const [showSuccessAlert, setShowSuccessAlert] = useState(false);
+  const [currentAppointment, setCurrentAppointment] = useState<Appointment | null>(null);
+  const [showAppointmentDetails, setShowAppointmentDetails] = useState(false);
+  const [isActionLoading, setIsActionLoading] = useState(false);
   
-  // Filtrer les rendez-vous
+  const [newAppointment, setNewAppointment] = useState<Partial<Appointment>>({
+    patientId: 1,
+    date: "",
+    time: "09:00",
+    duration: "30 min",
+    type: "Consultation",
+    doctor: "",
+    status: "Planifié"
+  });
+
+  // Initialize date-dependent states on client side
+  useEffect(() => {
+    const today = new Date();
+    setSelectedDate(today);
+    setCalendarMonth(today);
+    setNewAppointment(prev => ({
+      ...prev,
+      date: formatDateToDDMMYYYY(today),
+    }));
+  }, []);
+
+  // Formatage de la date en dd/mm/YYYY
+  function formatDateToDDMMYYYY(date: Date | null): string {
+    if (!date) return "";
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+
+  // Fonction pour convertir une date dd/mm/YYYY en Y-m-d
+  const formatToYMD = (date: Date | null): string | undefined => {
+    if (!date) return undefined;
+    const d = new Date(date);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  // Chargement initial des données
+  useEffect(() => {
+    if (!selectedDate) return;
+
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+
+        const patientsResponse = await getPatients();
+        const doctorsResponse = await getDoctors();
+        setPatients(patientsResponse.data);
+        setDoctors(doctorsResponse.data);
+
+        setNewAppointment(prev => ({
+          ...prev,
+          patientId: patientsResponse.data[0]?.id || 1,
+          doctor: doctorsResponse.data[0]?.id.toString() || "",
+        }));
+
+        const filters = {
+          doctor_id: filterDoctor === "all" ? undefined : filterDoctor,
+          status: filterStatus === "all" ? undefined : filterStatus,
+          type: filterType === "all" ? undefined : filterType,
+          date: formatToYMD(selectedDate),
+          search: searchTerm || undefined,
+        };
+
+        const appointmentsResponse = await getAppointments(filters);
+        const transformedAppointments = transformAppointments(appointmentsResponse.data);
+        setAppointments(transformedAppointments);
+      } catch (error) {
+        console.error('Erreur lors de la récupération des données:', error);
+        toast.error('Erreur lors de la récupération des données');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [filterDoctor, filterStatus, filterType, selectedDate, searchTerm, currentView]);
+
+  // Transformation avec conversion de date
+// Transformation avec conversion de date
+const transformAppointments = (apiAppointments: AppointmentResponse[]): Appointment[] => {
+  if (!selectedDate) return []; // Si selectedDate n'est pas défini, retourne une liste vide
+
+  const formattedDate = formatDateToDDMMYYYY(selectedDate); // Utilise directement selectedDate pour la date
+
+  return apiAppointments.map(appt => {
+    // Validation et transformation de l'heure
+    let formattedTime = "N/A"; // Valeur par défaut si l'heure est invalide
+    if (appt.time && appt.time.match(/^\d{2}:\d{2}(:\d{2})?$/)) { // Vérifie que l'heure est au format HH:MM ou HH:MM:SS
+      formattedTime = appt.time.split(':').slice(0, 2).join(':'); // Garde uniquement HH:MM
+    } else {
+      console.warn(`Heure invalide pour le rendez-vous ID ${appt.id}: ${appt.time}`);
+    }
+
+    return {
+      id: appt.id,
+      patientName: appt.patientName,
+      patientId: appt.patientId,
+      date: formattedDate, // Utilise la date sélectionnée directement
+      time: formattedTime,
+      duration: appt.duration || "N/A",
+      type: appt.type || "N/A",
+      doctor: appt.doctor || "N/A",
+      status: (appt.status as "Planifié" | "Confirmé" | "Annulé" | "Terminé") || "Planifié",
+      notes: appt.notes || '',
+      patient: {
+        phone: appt.patient?.phone || "N/A",
+        status: appt.patient?.status || "N/A"
+      }
+    };
+  });
+};
+
+  // Fonctions pour gérer l’affichage des détails
+  const openAppointmentDetails = (appointment: Appointment) => {
+    setCurrentAppointment(appointment);
+    setShowAppointmentDetails(true);
+  };
+
+  const closeAppointmentDetails = () => {
+    setShowAppointmentDetails(false);
+    setCurrentAppointment(null);
+  };
+
+  // Fonction pour ouvrir le formulaire d’édition
+  const openEditForm = (appointment: Appointment) => {
+    const doctor = doctors.find(d => d.name === appointment.doctor);
+    setCurrentAppointment(appointment);
+    setNewAppointment({
+      patientId: appointment.patientId,
+      date: appointment.date,
+      time: appointment.time,
+      duration: appointment.duration,
+      type: appointment.type,
+      doctor: doctor ? doctor.id.toString() : "",
+      status: appointment.status,
+      notes: appointment.notes
+    });
+    setShowAppointmentForm(true);
+  };
+
+  // Filtrer les rendez-vous côté client pour la vue Liste
   const filteredAppointments = appointments.filter(appointment => {
     const matchesSearch = appointment.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          appointment.doctor.toLowerCase().includes(searchTerm.toLowerCase());
-    
+                         appointment.doctor.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === "all" || appointment.status === filterStatus;
-    const matchesDoctor = filterDoctor === "all" || appointment.doctor === filterDoctor;
+    const matchesDoctor = filterDoctor === "all" || appointment.doctor === doctors.find(d => d.id === Number(filterDoctor))?.name;
     const matchesType = filterType === "all" || appointment.type === filterType;
     
     return matchesSearch && matchesStatus && matchesDoctor && matchesType;
   });
-  
-  // Obtenir les rendez-vous pour la date sélectionnée (vue calendrier)
-  const appointmentsForSelectedDate = appointments.filter(appointment => 
-    appointment.date === selectedDate
-  );
-  
-  // Générer les jours du mois (simplifié)
-  const daysInMonth = Array.from({ length: 31 }, (_, i) => {
+
+  // Fonction pour obtenir le nombre de jours dans un mois
+  const getDaysInMonth = (month: number, year: number): number => {
+    return new Date(year, month + 1, 0).getDate();
+  };
+
+  // Générer les jours du mois dynamiquement pour le mini-calendrier
+  const daysInMonth = Array.from({ length: getDaysInMonth(calendarMonth.getMonth(), calendarMonth.getFullYear()) }, (_, i) => {
     const day = i + 1;
-    const date = `${day < 10 ? '0' + day : day}/03/2025`;
-    const hasAppointments = appointments.some(a => a.date === date);
+    const date = `${day < 10 ? '0' + day : day}/${(calendarMonth.getMonth() + 1).toString().padStart(2, '0')}/${calendarMonth.getFullYear()}`;
+    const hasAppointments = filteredAppointments.some(a => a.date === date);
     return { day, date, hasAppointments };
   });
-  
+
   // Types de rendez-vous uniques
   const appointmentTypes = Array.from(new Set(appointments.map(a => a.type)));
-  
+
   // Statuts de rendez-vous uniques
   const appointmentStatuses = ["Planifié", "Confirmé", "Annulé", "Terminé"];
-  
+
   // Fonction pour obtenir la couleur du statut
   const getStatusColor = (status: string) => {
-    switch(status) {
+    switch (status) {
       case "Planifié": return "bg-blue-100 text-blue-800";
       case "Confirmé": return "bg-green-100 text-green-800";
       case "Annulé": return "bg-red-100 text-red-800";
@@ -129,7 +306,177 @@ export default function Appointments() {
       default: return "bg-gray-100 text-gray-800";
     }
   };
+
+  // Fonctions pour gérer le formulaire de rendez-vous
+  const openAppointmentForm = () => {
+    setCurrentAppointment(null);
+    setShowAppointmentForm(true);
+  };
   
+  const closeAppointmentForm = () => {
+    setShowAppointmentForm(false);
+    setNewAppointment({
+      patientId: patients[0]?.id || 1,
+      date: selectedDate ? formatDateToDDMMYYYY(selectedDate) : "",
+      time: "09:00",
+      duration: "30 min",
+      type: "Consultation",
+      doctor: doctors[0]?.id.toString() || "",
+      status: "Planifié"
+    });
+  };
+
+  const handleAppointmentInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    if (name === 'date') {
+      const [year, month, day] = value.split('-');
+      setNewAppointment(prev => ({ ...prev, [name]: `${day}/${month}/${year}` }));
+    } else {
+      setNewAppointment(prev => ({ ...prev, [name]: value }));
+    }
+  };
+
+  // Fonction pour ajouter/mettre à jour un rendez-vous
+  const saveAppointment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      setIsActionLoading(true);
+      const patient = patients.find(p => p.id === Number(newAppointment.patientId));
+      if (!patient) throw new Error("Patient non trouvé");
+    
+      const doctor = doctors.find(d => d.id === Number(newAppointment.doctor));
+      if (!doctor) throw new Error("Médecin non trouvé");
+    
+      const appointmentData = {
+        patient_id: newAppointment.patientId,
+        user_id: doctor.id,
+        date: newAppointment.date,
+        time: newAppointment.time,
+        duration: newAppointment.duration,
+        type: newAppointment.type,
+        status: newAppointment.status,
+        notes: newAppointment.notes
+      };
+    
+      let response: { data: AppointmentResponse };
+    
+      if (currentAppointment) {
+        response = await updateAppointment(currentAppointment.id, appointmentData);
+        setAppointments(appointments.map(appt => 
+          appt.id === currentAppointment.id ? transformAppointments([response.data])[0] : appt
+        ));
+      } else {
+        response = await createAppointment(appointmentData);
+        setAppointments([...appointments, transformAppointments([response.data])[0]]);
+      }
+      
+      setShowSuccessAlert(true);
+      setTimeout(() => setShowSuccessAlert(false), 3000);
+      closeAppointmentForm();
+    } catch (error) {
+      console.error("Erreur lors de la sauvegarde du RDV:", error);
+      let errorMessage = "Erreur lors de la sauvegarde du rendez-vous";
+      if (error instanceof Error) {
+        errorMessage += `: ${error.message}`;
+      }
+      alert(errorMessage);
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // Fonction pour confirmer un rendez-vous
+  const confirmAppointment = async (id: number) => {
+    try {
+      setIsActionLoading(true);
+      await updateAppointment(id, { status: 'Confirmé' });
+      setAppointments(appointments.map(appt => 
+        appt.id === id ? { ...appt, status: 'Confirmé' } : appt
+      ));
+    } catch (error) {
+      console.error("Erreur confirmation RDV:", error);
+      alert("Impossible de confirmer le rendez-vous. Veuillez réessayer.");
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // Fonction pour annuler un rendez-vous
+  const cancelAppointment = async (id: number) => {
+    try {
+      setIsActionLoading(true);
+      await updateAppointment(id, { status: 'Annulé' });
+      setAppointments(appointments.map(appt => 
+        appt.id === id ? { ...appt, status: 'Annulé' } : appt
+      ));
+    } catch (error) {
+      console.error("Erreur annulation RDV:", error);
+      alert("Impossible d'annuler le rendez-vous. Veuillez réessayer.");
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // Fonction pour supprimer un rendez-vous
+  const handleDeleteAppointment = async (id: number) => {
+    if (!confirm("Êtes-vous sûr de vouloir supprimer ce rendez-vous ?")) return;
+    
+    try {
+      setIsActionLoading(true);
+      await deleteAppointment(id);
+      setAppointments(appointments.filter(a => a.id !== id));
+    } catch (error) {
+      console.error("Erreur suppression RDV:", error);
+      alert("Impossible de supprimer le rendez-vous. Veuillez réessayer.");
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // Fonctions pour naviguer entre les jours
+  const handlePreviousDay = () => {
+    if (!selectedDate) return;
+    const newDate = new Date(selectedDate);
+    newDate.setDate(newDate.getDate() - 1);
+    setSelectedDate(newDate);
+    setCalendarMonth(new Date(newDate));
+  };
+
+  const handleNextDay = () => {
+    if (!selectedDate) return;
+    const newDate = new Date(selectedDate);
+    newDate.setDate(newDate.getDate() + 1);
+    setSelectedDate(newDate);
+    setCalendarMonth(new Date(newDate));
+  };
+
+  const handleToday = () => {
+    const today = new Date();
+    setSelectedDate(today);
+    setCalendarMonth(today);
+  };
+
+  // Fonctions pour naviguer entre les mois
+  const handlePreviousMonth = () => {
+    const newMonth = new Date(calendarMonth);
+    newMonth.setMonth(newMonth.getMonth() - 1);
+    setCalendarMonth(newMonth);
+    setSelectedDate(new Date(newMonth.getFullYear(), newMonth.getMonth(), 1));
+  };
+
+  const handleNextMonth = () => {
+    const newMonth = new Date(calendarMonth);
+    newMonth.setMonth(newMonth.getMonth() + 1);
+    setCalendarMonth(newMonth);
+    setSelectedDate(new Date(newMonth.getFullYear(), newMonth.getMonth(), 1));
+  };
+
+  // Render nothing until selectedDate is initialized
+  if (!selectedDate) {
+    return null;
+  }
+
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
@@ -242,6 +589,19 @@ export default function Appointments() {
             </div>
             
             <div className="flex space-x-2">
+              <div className="flex items-center space-x-2">
+                <button onClick={handlePreviousDay} className="p-1 rounded-full hover:bg-gray-100">
+                  <ChevronLeft className="h-5 w-5 text-gray-600" />
+                </button>
+                <span className="text-sm font-medium text-gray-700">{formatDateToDDMMYYYY(selectedDate)}</span>
+                <button onClick={handleNextDay} className="p-1 rounded-full hover:bg-gray-100">
+                  <ChevronRight className="h-5 w-5 text-gray-600" />
+                </button>
+                <button onClick={handleToday} className="px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg text-sm font-medium">
+                  Aujourd'hui
+                </button>
+              </div>
+              
               <div className="relative">
                 <select 
                   className="appearance-none pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
@@ -264,7 +624,9 @@ export default function Appointments() {
                 >
                   <option value="all">Tous les médecins</option>
                   {doctors.map((doctor) => (
-                    <option key={doctor.id} value={doctor.name}>{doctor.name}</option>
+                    <option key={doctor.id} value={String(doctor.id)}>
+                      {doctor.name}
+                    </option>
                   ))}
                 </select>
                 <Users className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
@@ -284,15 +646,25 @@ export default function Appointments() {
                 <CalendarClock className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
               </div>
               
-              <button className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center">
+              <button 
+                onClick={openAppointmentForm}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center"
+              >
                 <Plus className="h-5 w-5 mr-2" />
                 Nouveau rendez-vous
               </button>
             </div>
           </div>
           
+          {/* Loading State */}
+          {isLoading && (
+            <div className="flex justify-center items-center h-64">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+            </div>
+          )}
+          
           {/* List View */}
-          {currentView === 'list' && (
+          {!isLoading && currentView === 'list' && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-100">
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
@@ -328,66 +700,113 @@ export default function Appointments() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredAppointments.map((appointment) => {
-                      const patient = patients.find(p => p.id === appointment.patientId);
-                      const doctor = doctors.find(d => d.name === appointment.doctor);
-                      
-                      return (
-                        <tr key={appointment.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <div className={`flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center ${
-                                patient?.status === "Stable" ? "bg-green-100 text-green-700" :
-                                patient?.status === "Attention" ? "bg-yellow-100 text-yellow-700" :
-                                "bg-red-100 text-red-700"
-                              }`}>
-                                {appointment.patientName.split(' ').map(n => n[0]).join('')}
+                    {filteredAppointments.length > 0 ? (
+                      filteredAppointments.map((appointment) => {
+                        const patient = patients.find(p => p.id === appointment.patientId);
+                        const doctor = doctors.find(d => d.name === appointment.doctor);
+                        
+                        return (
+                          <tr key={appointment.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className={`flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center ${
+                                  patient?.status === "Stable" ? "bg-green-100 text-green-700" :
+                                  patient?.status === "Attention" ? "bg-yellow-100 text-yellow-700" :
+                                  "bg-red-100 text-red-700"
+                                }`}>
+                                  {appointment.patientName.split(' ').map(n => n[0]).join('')}
+                                </div>
+                                <div className="ml-4">
+                                  <div className="text-sm font-medium text-gray-900">{appointment.patientName}</div>
+                                  <div className="text-sm text-gray-500">{patient?.phone}</div>
+                                </div>
                               </div>
-                              <div className="ml-4">
-                                <div className="text-sm font-medium text-gray-900">{appointment.patientName}</div>
-                                <div className="text-sm text-gray-500">{patient?.phone}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900">{appointment.date}</div>
+                              <div className="text-sm text-gray-500">{appointment.time}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-indigo-100 text-indigo-800">
+                                {appointment.type}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="h-3 w-3 rounded-full mr-2" style={{ backgroundColor: doctor?.color || '#4f46e5' }}></div>
+                                <div className="text-sm text-gray-900">{appointment.doctor}</div>
                               </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">{appointment.date}</div>
-                            <div className="text-sm text-gray-500">{appointment.time}</div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-indigo-100 text-indigo-800">
-                              {appointment.type}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <div className="h-3 w-3 rounded-full mr-2" style={{ backgroundColor: doctor?.color || '#4f46e5' }}></div>
-                              <div className="text-sm text-gray-900">{appointment.doctor}</div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {appointment.duration}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(appointment.status)}`}>
-                              {appointment.status}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <div className="flex space-x-2">
-                              <button className="text-indigo-600 hover:text-indigo-900">
-                                <CheckCircle className="h-5 w-5" />
-                              </button>
-                              <button className="text-gray-600 hover:text-gray-900">
-                                <Edit className="h-5 w-5" />
-                              </button>
-                              <button className="text-red-600 hover:text-red-900">
-                                <XCircle className="h-5 w-5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {appointment.duration}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(appointment.status)}`}>
+                                {appointment.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                              <div className="flex space-x-2">
+                                <button 
+                                  onClick={() => openAppointmentDetails(appointment)}
+                                  className="text-blue-600 hover:text-blue-900"
+                                  title="Voir les détails"
+                                  disabled={isActionLoading}
+                                >
+                                  <Eye className="h-5 w-5" />
+                                </button>
+                                <button 
+                                  onClick={() => openEditForm(appointment)}
+                                  className="text-gray-600 hover:text-gray-900"
+                                  title="Modifier"
+                                  disabled={isActionLoading}
+                                >
+                                  <Edit className="h-5 w-5" />
+                                </button>
+                                <button 
+                                  onClick={() => confirmAppointment(appointment.id)}
+                                  className={`text-green-600 hover:text-green-900 ${appointment.status === 'Confirmé' || appointment.status === 'Terminé' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                  title="Confirmer"
+                                  disabled={isActionLoading || appointment.status === 'Confirmé' || appointment.status === 'Terminé'}
+                                >
+                                  {isActionLoading ? (
+                                    <div className="animate-spin h-5 w-5 border-t-2 border-green-600 rounded-full"></div>
+                                  ) : (
+                                    <CheckCircle className="h-5 w-5" />
+                                  )}
+                                </button>
+                                <button 
+                                  onClick={() => cancelAppointment(appointment.id)}
+                                  className={`text-red-600 hover:text-red-900 ${appointment.status === 'Annulé' || appointment.status === 'Terminé' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                  title="Annuler"
+                                  disabled={isActionLoading || appointment.status === 'Annulé' || appointment.status === 'Terminé'}
+                                >
+                                  {isActionLoading ? (
+                                    <div className="animate-spin h-5 w-5 border-t-2 border-red-600 rounded-full"></div>
+                                  ) : (
+                                    <XCircle className="h-5 w-5" />
+                                  )}
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteAppointment(appointment.id)}
+                                  className="text-red-600 hover:text-red-900"
+                                  title="Supprimer"
+                                  disabled={isActionLoading}
+                                >
+                                  <Trash2 className="h-5 w-5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
+                          Aucun rendez-vous trouvé pour le {formatDateToDDMMYYYY(selectedDate)}
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -395,17 +814,19 @@ export default function Appointments() {
           )}
           
           {/* Calendar View */}
-          {currentView === 'calendar' && (
+          {!isLoading && currentView === 'calendar' && (
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               {/* Mini Calendar */}
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                 <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-lg font-bold text-gray-800">Mars 2025</h2>
+                  <h2 className="text-lg font-bold text-gray-800">
+                    {calendarMonth.toLocaleString('fr-FR', { month: 'long', year: 'numeric' })}
+                  </h2>
                   <div className="flex items-center space-x-2">
-                    <button className="p-1 rounded-full hover:bg-gray-100">
+                    <button onClick={handlePreviousMonth} className="p-1 rounded-full hover:bg-gray-100">
                       <ChevronLeft className="h-5 w-5 text-gray-600" />
                     </button>
-                    <button className="p-1 rounded-full hover:bg-gray-100">
+                    <button onClick={handleNextMonth} className="p-1 rounded-full hover:bg-gray-100">
                       <ChevronRight className="h-5 w-5 text-gray-600" />
                     </button>
                   </div>
@@ -426,14 +847,17 @@ export default function Appointments() {
                     <button 
                       key={index} 
                       className={`aspect-square flex flex-col items-center justify-center rounded-lg text-sm p-1
-                        ${day.date === selectedDate ? 'bg-indigo-600 text-white' : 'hover:bg-gray-100'}
-                        ${day.hasAppointments && day.date !== selectedDate ? 'font-medium' : ''}
+                        ${day.date === formatDateToDDMMYYYY(selectedDate) ? 'bg-indigo-600 text-white' : 'hover:bg-gray-100'}
+                        ${day.hasAppointments && day.date !== formatDateToDDMMYYYY(selectedDate) ? 'font-medium' : ''}
                       `}
-                      onClick={() => setSelectedDate(day.date)}
+                      onClick={() => {
+                        const [dayStr, monthStr, yearStr] = day.date.split('/');
+                        setSelectedDate(new Date(parseInt(yearStr), parseInt(monthStr) - 1, parseInt(dayStr)));
+                      }}
                     >
                       <span>{day.day}</span>
                       {day.hasAppointments && (
-                        <div className={`w-1 h-1 rounded-full mt-1 ${day.date === selectedDate ? 'bg-white' : 'bg-indigo-400'}`}></div>
+                        <div className={`w-1 h-1 rounded-full mt-1 ${day.date === formatDateToDDMMYYYY(selectedDate) ? 'bg-white' : 'bg-indigo-400'}`}></div>
                       )}
                     </button>
                   ))}
@@ -451,7 +875,10 @@ export default function Appointments() {
                   </div>
                 </div>
                 
-                <button className="mt-6 w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-600 py-2 px-4 rounded-lg text-sm font-medium flex items-center justify-center">
+                <button 
+                  onClick={openAppointmentForm}
+                  className="mt-6 w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-600 py-2 px-4 rounded-lg text-sm font-medium flex items-center justify-center"
+                >
                   <Plus className="h-4 w-4 mr-2" />
                   Ajouter un rendez-vous
                 </button>
@@ -461,31 +888,18 @@ export default function Appointments() {
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 md:col-span-3">
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-lg font-bold text-gray-800">
-                    Rendez-vous du {selectedDate}
+                    Rendez-vous du {formatDateToDDMMYYYY(selectedDate)}
                   </h2>
-                  <div className="flex space-x-2">
-                    <button className="p-1 rounded-full hover:bg-gray-100" onClick={() => {
-                      const currentIndex = daysInMonth.findIndex(d => d.date === selectedDate);
-                      if (currentIndex > 0) {
-                        setSelectedDate(daysInMonth[currentIndex - 1].date);
-                      }
-                    }}>
-                      <ChevronLeft className="h-5 w-5 text-gray-600" />
-                    </button>
-                    <button className="p-1 rounded-full hover:bg-gray-100" onClick={() => {
-                      const currentIndex = daysInMonth.findIndex(d => d.date === selectedDate);
-                      if (currentIndex < daysInMonth.length - 1) {
-                        setSelectedDate(daysInMonth[currentIndex + 1].date);
-                      }
-                    }}>
-                      <ChevronRight className="h-5 w-5 text-gray-600" />
-                    </button>
-                  </div>
                 </div>
                 
-                {appointmentsForSelectedDate.length > 0 ? (
+                {filteredAppointments.filter(appointment => 
+                  selectedDate && appointment.date === formatDateToDDMMYYYY(selectedDate)
+                ).length > 0 ? (
                   <div className="space-y-4">
-                    {appointmentsForSelectedDate
+                    {filteredAppointments
+                      .filter(appointment => 
+                        selectedDate && appointment.date === formatDateToDDMMYYYY(selectedDate)
+                      )
                       .sort((a, b) => a.time.localeCompare(b.time))
                       .map((appointment) => {
                         const doctor = doctors.find(d => d.name === appointment.doctor);
@@ -518,14 +932,53 @@ export default function Appointments() {
                             </div>
                             
                             <div className="flex space-x-2 items-start">
-                              <button className="p-2 rounded-lg hover:bg-gray-100 text-indigo-600">
-                                <CheckCircle className="h-5 w-5" />
+                              <button 
+                                onClick={() => openAppointmentDetails(appointment)}
+                                className="p-2 rounded-lg hover:bg-gray-100 text-blue-600"
+                                title="Voir les détails"
+                                disabled={isActionLoading}
+                              >
+                                <Eye className="h-5 w-5" />
                               </button>
-                              <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-600">
+                              <button 
+                                onClick={() => openEditForm(appointment)}
+                                className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+                                title="Modifier"
+                                disabled={isActionLoading}
+                              >
                                 <Edit className="h-5 w-5" />
                               </button>
-                              <button className="p-2 rounded-lg hover:bg-gray-100 text-red-600">
-                                <XCircle className="h-5 w-5" />
+                              <button 
+                                onClick={() => confirmAppointment(appointment.id)}
+                                className={`p-2 rounded-lg hover:bg-gray-100 text-green-600 ${appointment.status === 'Confirmé' || appointment.status === 'Terminé' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                title="Confirmer"
+                                disabled={isActionLoading || appointment.status === 'Confirmé' || appointment.status === 'Terminé'}
+                              >
+                                {isActionLoading ? (
+                                  <div className="animate-spin h-5 w-5 border-t-2 border-green-600 rounded-full"></div>
+                                ) : (
+                                  <CheckCircle className="h-5 w-5" />
+                                )}
+                              </button>
+                              <button 
+                                onClick={() => cancelAppointment(appointment.id)}
+                                className={`p-2 rounded-lg hover:bg-gray-100 text-red-600 ${appointment.status === 'Annulé' || appointment.status === 'Terminé' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                title="Annuler"
+                                disabled={isActionLoading || appointment.status === 'Annulé' || appointment.status === 'Terminé'}
+                              >
+                                {isActionLoading ? (
+                                  <div className="animate-spin h-5 w-5 border-t-2 border-red-600 rounded-full"></div>
+                                ) : (
+                                  <XCircle className="h-5 w-5" />
+                                )}
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteAppointment(appointment.id)}
+                                className="p-2 rounded-lg hover:bg-gray-100 text-red-600"
+                                title="Supprimer"
+                                disabled={isActionLoading}
+                              >
+                                <Trash2 className="h-5 w-5" />
                               </button>
                             </div>
                           </div>
@@ -535,9 +988,20 @@ export default function Appointments() {
                 ) : (
                   <div className="flex flex-col items-center justify-center py-12">
                     <Calendar className="h-16 w-16 text-gray-300 mb-4" />
-                    <h3 className="text-lg font-medium text-gray-800 mb-2">Aucun rendez-vous</h3>
-                    <p className="text-gray-500 mb-6">Il n'y a pas de rendez-vous programmés pour cette date.</p>
-                    <button className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center">
+                    <h3 className="text-lg font-medium text-gray-800 mb-2">Pour voir les rendez-vous</h3>
+                    <p className="text-gray-500 mb-6">
+                      Veuillez consulter l'onglet{' '}
+                      <button 
+                        onClick={() => setCurrentView('list')}
+                        className="text-indigo-600 hover:underline"
+                      >
+                        Liste
+                      </button>.
+                    </p>
+                    <button 
+                      onClick={openAppointmentForm}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center"
+                    >
                       <Plus className="h-5 w-5 mr-2" />
                       Ajouter un rendez-vous
                     </button>
@@ -548,6 +1012,254 @@ export default function Appointments() {
           )}
         </main>
       </div>
+
+      {/* Formulaire d’ajout/édition de rendez-vous */}
+      {showAppointmentForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-800">
+                  {currentAppointment ? 'Modifier le rendez-vous' : 'Nouveau rendez-vous'}
+                </h2>
+                <button 
+                  onClick={closeAppointmentForm}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+              
+              <form onSubmit={saveAppointment}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Patient</label>
+                    <select
+                      name="patientId"
+                      value={newAppointment.patientId}
+                      onChange={handleAppointmentInputChange}
+                      className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      required
+                    >
+                      {patients.map(patient => (
+                        <option key={patient.id} value={patient.id}>
+                          {`${patient.first_name} ${patient.last_name}`.trim()}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Médecin</label>
+                    <select
+                      name="doctor"
+                      value={newAppointment.doctor}
+                      onChange={handleAppointmentInputChange}
+                      className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      required
+                    >
+                      {doctors.map(doctor => (
+                        <option key={doctor.id} value={doctor.id}>
+                          {doctor.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                    <input
+                      type="date"
+                      name="date"
+                      value={newAppointment.date?.split('/').reverse().join('-') || ''} 
+                      onChange={handleAppointmentInputChange}
+                      className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Heure</label>
+                    <input
+                      type="time"
+                      name="time"
+                      value={newAppointment.time}
+                      onChange={handleAppointmentInputChange}
+                      className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Durée</label>
+                    <select
+                      name="duration"
+                      value={newAppointment.duration}
+                      onChange={handleAppointmentInputChange}
+                      className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      required
+                    >
+                      <option value="30 min">30 minutes</option>
+                      <option value="45 min">45 minutes</option>
+                      <option value="60 min">1 heure</option>
+                      <option value="90 min">1 heure 30</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                    <select
+                      name="type"
+                      value={newAppointment.type}
+                      onChange={handleAppointmentInputChange}
+                      className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      required
+                    >
+                      <option value="Consultation">Consultation</option>
+                      <option value="Dialyse">Dialyse</option>
+                      <option value="Suivi">Suivi</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Statut</label>
+                    <select
+                      name="status"
+                      value={newAppointment.status}
+                      onChange={handleAppointmentInputChange}
+                      className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      required
+                    >
+                      <option value="Planifié">Planifié</option>
+                      <option value="Confirmé">Confirmé</option>
+                      <option value="Annulé">Annulé</option>
+                    </select>
+                  </div>
+                  
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optionnel)</label>
+                    <textarea
+                      name="notes"
+                      value={newAppointment.notes || ""}
+                      onChange={handleAppointmentInputChange}
+                      className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      rows={3}
+                    />
+                  </div>
+                </div>
+                
+                <div className="flex justify-end mt-6 space-x-4">
+                  <button
+                    type="button"
+                    onClick={closeAppointmentForm}
+                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg"
+                    disabled={isActionLoading}
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center"
+                    disabled={isActionLoading}
+                  >
+                    {isActionLoading ? (
+                      <div className="animate-spin h-5 w-5 border-t-2 border-white rounded-full mr-2"></div>
+                    ) : null}
+                    {currentAppointment ? 'Mettre à jour' : 'Créer le rendez-vous'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de détails du rendez-vous */}
+      {showAppointmentDetails && currentAppointment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-800">Détails du rendez-vous</h2>
+                <button 
+                  onClick={closeAppointmentDetails}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500">Patient</h3>
+                    <p className="mt-1 text-sm text-gray-900">{currentAppointment.patientName}</p>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500">Téléphone</h3>
+                    <p className="mt-1 text-sm text-gray-900">{currentAppointment.patient.phone}</p>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500">Date</h3>
+                    <p className="mt-1 text-sm text-gray-900">{currentAppointment.date}</p>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500">Heure</h3>
+                    <p className="mt-1 text-sm text-gray-900">{currentAppointment.time}</p>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500">Médecin</h3>
+                    <p className="mt-1 text-sm text-gray-900">{currentAppointment.doctor}</p>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500">Durée</h3>
+                    <p className="mt-1 text-sm text-gray-900">{currentAppointment.duration}</p>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500">Type</h3>
+                    <p className="mt-1 text-sm text-gray-900">{currentAppointment.type}</p>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500">Statut</h3>
+                    <p className="mt-1 text-sm text-gray-900">
+                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(currentAppointment.status)}`}>
+                        {currentAppointment.status}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+                
+                {currentAppointment.notes && (
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500">Notes</h3>
+                    <p className="mt-1 text-sm text-gray-900 whitespace-pre-line">{currentAppointment.notes}</p>
+                  </div>
+                )}
+                
+                <div className="flex justify-end mt-6 space-x-4">
+                  <button
+                    type="button"
+                    onClick={closeAppointmentDetails}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg"
+                  >
+                    Fermer
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Notification de succès */}
+      {showSuccessAlert && (
+        <div className="fixed bottom-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center">
+          <CheckCircle className="h-5 w-5 mr-2" />
+          <span>
+            {currentAppointment ? 'Rendez-vous mis à jour avec succès !' : 'Rendez-vous créé avec succès !'}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

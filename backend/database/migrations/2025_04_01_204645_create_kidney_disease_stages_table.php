@@ -13,13 +13,16 @@ return new class extends Migration
     {
         Schema::create('kidney_disease_stages', function (Blueprint $table) {
             $table->id();
-            $table->string('stage')->comment('G1, G2, G3a, G3b, G4, G5');
-            $table->text('name');
+            $table->integer('stage')->comment('0: Normal, 1-5: Stades de maladie rénale');
+            $table->string('name');
             $table->text('description');
             $table->float('gfr_min')->comment('Débit de filtration glomérulaire minimum');
             $table->float('gfr_max')->comment('Débit de filtration glomérulaire maximum');
-            $table->text('recommendations');
+            $table->text('recommendations')->nullable()->comment('Recommandations médicales');
             $table->timestamps();
+
+            // Optionnel : ajout d'un index pour le stage
+            $table->index('stage');
         });
     }
 

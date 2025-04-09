@@ -294,7 +294,12 @@ export async function deletePatient(id) {
  * @returns {Promise<Array>} Liste des rendez-vous
  */
 export async function getAppointments(filters = {}) {
-  const queryParams = new URLSearchParams(filters).toString();
+  // Clean up filters to remove undefined values
+  const cleanedFilters = Object.fromEntries(
+    Object.entries(filters).filter(([_, value]) => value !== undefined && value !== 'undefined')
+  );
+  
+  const queryParams = new URLSearchParams(cleanedFilters).toString();
   const endpoint = queryParams ? `appointments?${queryParams}` : 'appointments';
   return fetchAPI(endpoint, {}, true);
 }

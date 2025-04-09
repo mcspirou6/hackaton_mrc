@@ -13,8 +13,13 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call([
+            KidneyDiseaseStageSeeder::class, // D'abord les tables de référence
             AdminUserSeeder::class,
-            KidneyDiseaseStageSeeder::class,
+            DoctorSeeder::class,
+            PatientSeeder::class, // Remplacer PatientsTableSeeder
+            // AppointmentsTableSeeder::class doit venir après
+            AppointmentsTableSeeder::class,
+            ReportsTableSeeder::class
         ]);
     }
 }
