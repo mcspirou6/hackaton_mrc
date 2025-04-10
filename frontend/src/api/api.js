@@ -242,6 +242,25 @@ export async function getPatients() {
 }
 
 /**
+ * Récupère les statistiques des Patients
+ */
+/**
+ * @returns {Promise<{
+*   success: boolean,
+*   message?: string,
+*   data?: {
+*     total_patients_medecin: number,
+*     total_rendez_vous: number,
+*     total_patients_critiques: number,
+*     
+*   }
+* }>}
+*/
+export async function getPatientsStatistics() {
+  return fetchAPI('statistic/patients', {}, true);
+ }
+
+/**
  * Récupère les détails d'un patient
  * @param {number} id - ID du patient
  * @returns {Promise<Object>} Détails du patient
@@ -273,6 +292,26 @@ export async function updatePatient(id, patientData) {
     method: 'PUT',
     body: JSON.stringify(patientData),
   }, true);
+}
+
+/**
+ * Récupère les options de statut
+ * @returns {Promise<Array<{value: string, label: string}>>}
+ */
+export async function getStatusOptions() {
+  return fetchAPI('patient-options/statuses', {
+    method: 'GET'
+  }, true); // Adaptez "authentifié" selon vos besoins
+}
+
+/**
+ * Récupère les stades MRC
+ * @returns {Promise<Array<{value: string, label: string}>>}
+ */
+export async function getCKDStages() {
+  return fetchAPI('patient-options/ckd-stages', {
+    method: 'GET'
+  }, true); // Adaptez "authentifié" selon vos besoins
 }
 
 /**

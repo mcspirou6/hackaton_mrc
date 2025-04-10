@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use App\Models\PatientRecord;  // Ajoutez cette ligne
 
 class Patient extends Model
 {
@@ -29,6 +28,10 @@ class Patient extends Model
         'emergency_contact',
         'referring_doctor_id',
         'photo_url',
+        'status',
+        'ckd_stage',
+        'derniere_visite',
+        'prochaine_visite',
     ];
 
     /**
@@ -38,6 +41,8 @@ class Patient extends Model
      */
     protected $casts = [
         'birth_date' => 'date',
+        'derniere_visite' => 'date',
+        'prochaine_visite' => 'date',
     ];
 
 
