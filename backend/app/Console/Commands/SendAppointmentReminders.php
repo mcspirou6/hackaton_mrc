@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use App\Models\Appointment;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
+use App\Models\Patient;
 use App\Mail\AppointmentReminder;
 use App\Mail\AppointmentReminderPatient;
 use Illuminate\Support\Facades\DB;
@@ -18,30 +19,36 @@ class SendAppointmentReminders extends Command
 
     public function handle(): void
     {
+        //$now = now(); // Utilise l'instance Carbon de Laravel pour obtenir la date et l'heure actuelles
+
         $now = Carbon::now();
         $target = $now->copy()->addMinute(); // Rappel 1 min avant
 
         // Debug pour vérifier l'heure ciblée
+        // Debug pour vérifier la date et l'heure ciblées
         $this->info('Date ciblée : ' . $target->format('Y-m-d'));
         $this->info('Heure ciblée : ' . $target->format('H:i:s'));
 
-        logger("Recherche des RDV pour : $date à $time");
+        // Par cette ligne :
+        logger("Recherche des RDV pour : " . $target->format('Y-m-d') . " à " . $target->format('H:i:s'));
 
         $appointments = Appointment::with(['patient', 'doctor'])
             ->where('date', $target->format('Y-m-d'))
             ->where('time', $target->format('H:i:s')) // ⚠️ format 16:30:00
             ->get();
-            
+
 
         foreach ($appointments as $appointment) {
+
             // 🔹 Récupération du médecin
             $doctor = User::where('id', $appointment->user_id)->where('role', 'medecin')->first();
 
             // 🔹 Récupération du patient (depuis users via le nom, ou tout autre mapping propre si tu as)
-            $patient = $appointment->patient?->user;
-                /* ->where('last_name', $appointment->patient->last_name)
+            //$patient = $appointment->patient?->user;
+            $patient = User::where('first_name', $appointment->patient->first_name)
+                ->where('last_name', $appointment->patient->last_name)
                 ->where('role', 'patient')
-                ->first(); */
+                ->first();
 
             // 🔸 Envoi au médecin
             if ($doctor && $doctor->email) {

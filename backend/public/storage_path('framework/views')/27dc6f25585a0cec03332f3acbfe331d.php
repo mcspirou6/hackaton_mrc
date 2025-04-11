@@ -5,6 +5,7 @@
     <li>Patient : <?php echo e($appointment->patient->first_name); ?> <?php echo e($appointment->patient->last_name); ?></li>
     <li>Date : <?php echo e($appointment->date); ?> à <?php echo e($appointment->time); ?></li>
     <li>Type : <?php echo e($appointment->type); ?></li>
+    <li>Statut : <?php echo e($appointment->status); ?></li>
 </ul>
 
 <p>Merci de consulter la plateforme pour plus de détails.</p>
