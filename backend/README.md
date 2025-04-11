@@ -17,8 +17,8 @@ Avant de commencer, assurez-vous d'avoir installé sur votre machine :
 ### Cloner le dépôt
 
 ```bash
-git clone https://github.com/votre-utilisateur/nom-du-projet.git
-cd nom-du-projet
+git clone https://github.com/mcspirou6/hackaton_mrc.git
+cd hackaton_mrc
 ```
 
 ### Installer les dépendances PHP
