@@ -16,8 +16,12 @@
     "postcss": "^7.0.39",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+<<<<<<< HEAD
     "react-toastify": "^11.0.5",
     "recharts": "^2.15.2"
+=======
+    "react-toastify": "^11.0.5"
+>>>>>>> b44ff70ec20f70d968a7f9ab534eed175a502b31
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

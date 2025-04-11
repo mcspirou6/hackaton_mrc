@@ -10,10 +10,14 @@ use App\Http\Controllers\API\AppointmentController;
 use App\Http\Controllers\API\ConsultationController;
 use App\Http\Controllers\API\PatientRecordController;
 use App\Http\Controllers\API\KidneyDiseaseStageController;
+<<<<<<< HEAD
 use App\Http\Controllers\API\MedicalInfoController;
 use App\Http\Controllers\API\MedicalHistoryController;
 use App\Http\Controllers\API\ImagingTestController;
 use App\Http\Controllers\API\TNMClassificationController;
+=======
+use App\Http\Controllers\API\medecin\StatistiqueController;
+>>>>>>> b44ff70ec20f70d968a7f9ab534eed175a502b31
 
 /*
 |--------------------------------------------------------------------------
@@ -35,30 +39,33 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [AuthController::class, 'user']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/change-password', [AuthController::class, 'changePassword']);
-    
+
     // Routes pour les médecins
     Route::apiResource('users', UserController::class);
     Route::get('/doctors', [UserController::class, 'index']);
     Route::get('/doctors/statistics', [UserController::class, 'statistics']);
     Route::post('/users/{id}/reset-password', [AuthController::class, 'resetPassword']);
-    
+
     // Routes pour les patients
     Route::apiResource('patients', PatientController::class);
-    
+    Route::get('/statistic/patients', [StatistiqueController::class, 'index']);
+    Route::get('/patient-options/statuses', [PatientController::class, 'getStatusOptions']);
+    Route::get('/patient-options/ckd-stages', [PatientController::class, 'getCKDStages']);
+
     // Routes pour les rendez-vous
     Route::apiResource('appointments', AppointmentController::class);
     Route::get('/appointments/statistics', [AppointmentController::class, 'statistics']);
-    
+
     // Routes pour les consultations
     Route::apiResource('consultations', ConsultationController::class);
     Route::get('/consultations/statistics', [ConsultationController::class, 'statistics']);
     Route::get('/patients/{patientId}/consultations', [ConsultationController::class, 'getPatientHistory']);
-    
+
     // Routes pour les dossiers médicaux
     Route::apiResource('patient-records', PatientRecordController::class);
     Route::get('/patient-records/statistics', [PatientRecordController::class, 'statistics']);
     Route::get('/patients/{patientId}/latest-record', [PatientRecordController::class, 'getLatestForPatient']);
-    
+
     // Routes pour les stades de maladie rénale
     Route::apiResource('kidney-disease-stages', KidneyDiseaseStageController::class);
     Route::post('/determine-stage', [KidneyDiseaseStageController::class, 'determineStageByGFR']);
