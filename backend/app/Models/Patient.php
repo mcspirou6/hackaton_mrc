@@ -46,6 +46,7 @@ class Patient extends Model
     ];
 
 
+
     /**
      * Get the referring doctor for this patient.
      */
