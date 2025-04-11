@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\API;
 
 use App\Mail\AppointmentCreated;
+use App\Mail\AppointmentPatient;
 use Illuminate\Support\Facades\Mail;
 
 use App\Http\Controllers\Controller;
@@ -166,17 +167,24 @@ class AppointmentController extends Controller
             ], 400);
         }
 
-        /* try {
-            Mail::to($appointment->user->email)->send(new AppointmentCreated($appointment));
-            //Mail::to($appointment->doctor->email)->send(new AppointmentCreated($appointment));
-            //Mail::to($appointment->patient->email)->send(new AppointmentCreated($appointment));
-        } catch (\Exception $e) {
-            \Log::error('Erreur lors de l\'envoi de l\'email : ' . $e->getMessage());
+        // Vérifier et envoyer l'email au patient
+
+        $patient = $appointment->patient;
+
+        // Rechercher le User correspondant au Patient
+        $patientUser = User::where('first_name', $patient->first_name)
+                        ->where('last_name', $patient->last_name)
+                        ->where('role', 'patient')
+                        ->first();
+
+        if ($patientUser && $patientUser->email) {
+            Mail::to($patientUser->email)->send(new AppointmentPatient($appointment));
+        }else {
             return response()->json([
                 'success' => false,
-                'message' => 'Erreur lors de l\'envoi de l\'email.'
-            ], 500);
-        } */
+                'message' => 'Le patient n\'a pas d\'email associé ou son rôle est incorrect.',
+            ], 400);
+        }
 
         // Récupérer le patient et le médecin pour la réponse
         $patient = Patient::find($validated['patient_id']);
