@@ -10,14 +10,11 @@ use App\Http\Controllers\API\AppointmentController;
 use App\Http\Controllers\API\ConsultationController;
 use App\Http\Controllers\API\PatientRecordController;
 use App\Http\Controllers\API\KidneyDiseaseStageController;
-<<<<<<< HEAD
 use App\Http\Controllers\API\MedicalInfoController;
 use App\Http\Controllers\API\MedicalHistoryController;
 use App\Http\Controllers\API\ImagingTestController;
 use App\Http\Controllers\API\TNMClassificationController;
-=======
 use App\Http\Controllers\API\medecin\StatistiqueController;
->>>>>>> b44ff70ec20f70d968a7f9ab534eed175a502b31
 
 /*
 |--------------------------------------------------------------------------
