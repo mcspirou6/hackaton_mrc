@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="200" height="400" viewBox="0 0 200 400" xmlns="http://www.w3.org/2000/svg">
+  <!-- Tête -->
+  <circle cx="100" cy="50" r="30" fill="#f4d03f"/>
+  
+  <!-- Corps -->
+  <rect x="70" y="80" width="60" height="120" fill="#f4d03f"/>
+  
+  <!-- Bras gauche -->
+  <rect x="40" y="90" width="30" height="100" fill="#f4d03f"/>
+  
+  <!-- Bras droit -->
+  <rect x="130" y="90" width="30" height="100" fill="#f4d03f"/>
+  
+  <!-- Jambe gauche -->
+  <rect x="70" y="200" width="25" height="120" fill="#f4d03f"/>
+  
+  <!-- Jambe droite -->
+  <rect x="105" y="200" width="25" height="120" fill="#f4d03f"/>
+  
+  <!-- Reins -->
+  <ellipse cx="80" cy="150" rx="15" ry="20" fill="#e74c3c"/>
+  <ellipse cx="120" cy="150" rx="15" ry="20" fill="#e74c3c"/>
+  
+  <!-- Flèches pointant vers les reins -->
+  <path d="M50,130 L70,150" stroke="black" stroke-width="2" fill="none"/>
+  <path d="M150,130 L130,150" stroke="black" stroke-width="2" fill="none"/>
+  
+  <!-- Légende -->
+  <text x="30" y="125" font-size="12">Rein gauche</text>
+  <text x="130" y="125" font-size="12">Rein droit</text>
+</svg>

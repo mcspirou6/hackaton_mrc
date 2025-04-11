@@ -30,7 +30,9 @@ import {
   deleteDoctor, 
   resetDoctorPassword, 
   getDoctorStatistics,
-  logout 
+  getDashboardStats,
+  logout,
+  fetchAPI 
 } from "@/api/api";
 
 // Types
@@ -68,11 +70,9 @@ interface DoctorData {
 
 interface LoginHistory {
   id: number;
-  doctorId: number;
   doctorName: string;
+  email: string;
   timestamp: string;
-  device: string;
-  location: string;
   status: 'success' | 'failed';
 }
 
@@ -113,60 +113,58 @@ interface DoctorsResponse {
   doctors?: Doctor[];
 }
 
+interface DashboardStats {
+  totalPatients: number;
+  criticalPatients: number;
+  followUpRate: number;
+  doctorsCount: number;
+  patientsByStage: {
+    [key: string]: number;
+  };
+}
+
 // Mock data for login history (à remplacer par des données réelles plus tard)
 const mockLoginHistory: LoginHistory[] = [
   {
     id: 1,
-    doctorId: 1,
     doctorName: 'Dr. Jean Dupont',
+    email: 'jean.dupont@example.com',
     timestamp: '2023-04-01T08:30:00',
-    device: 'iPhone 13',
-    location: 'Paris, France',
     status: 'success'
   },
   {
     id: 2,
-    doctorId: 2,
     doctorName: 'Dr. Marie Laurent',
+    email: 'marie.laurent@example.com',
     timestamp: '2023-04-01T09:15:00',
-    device: 'Samsung Galaxy S22',
-    location: 'Lyon, France',
     status: 'success'
   },
   {
     id: 3,
-    doctorId: 3,
     doctorName: 'Dr. Pierre Martin',
+    email: 'pierre.martin@example.com',
     timestamp: '2023-03-31T14:45:00',
-    device: 'MacBook Pro',
-    location: 'Marseille, France',
     status: 'success'
   },
   {
     id: 4,
-    doctorId: 5,
     doctorName: 'Dr. Thomas Bernard',
+    email: 'thomas.bernard@example.com',
     timestamp: '2023-03-30T11:20:00',
-    device: 'iPad Air',
-    location: 'Bordeaux, France',
     status: 'success'
   },
   {
     id: 5,
-    doctorId: 1,
     doctorName: 'Dr. Jean Dupont',
+    email: 'jean.dupont@example.com',
     timestamp: '2023-03-29T16:05:00',
-    device: 'Windows PC',
-    location: 'Paris, France',
     status: 'success'
   },
   {
     id: 6,
-    doctorId: 2,
     doctorName: 'Dr. Marie Laurent',
+    email: 'marie.laurent@example.com',
     timestamp: '2023-03-28T10:30:00',
-    device: 'Samsung Galaxy S22',
-    location: 'Unknown',
     status: 'failed'
   }
 ];
@@ -190,18 +188,16 @@ export default function AdminPage() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [sortedDoctors, setSortedDoctors] = useState<Doctor[]>([]);
 
-   const [statistics, setStatistics] = useState({
-    total_doctors: 0,
-    active_doctors: 0,
-    desactive_doctors: 0,
-    suspendu_doctors: 0,
-    total_patients: 0,
-    average_patients_per_doctor: 0,
+  const [stats, setStats] = useState<DashboardStats>({
+    totalPatients: 0,
+    criticalPatients: 0,
+    followUpRate: 0,
+    doctorsCount: 0,
+    patientsByStage: {}
   });
 
-  
   // State for login history
-  const [loginHistory, setLoginHistory] = useState<LoginHistory[]>(mockLoginHistory);
+  const [loginHistory, setLoginHistory] = useState<LoginHistory[]>([]);
   
   // State for modals
   const [isAddDoctorModalOpen, setIsAddDoctorModalOpen] = useState(false);
@@ -229,16 +225,22 @@ export default function AdminPage() {
   // Fonction pour charger les statistiques
     const loadStatistics = async () => {
       try {
-        const response = await getDoctorStatistics();
+        const response = await getDoctorStatistics() as ApiResponse<{
+          total_doctors: number;
+          active_doctors: number;
+          desactive_doctors: number;
+          suspendu_doctors: number;
+          total_patients: number;
+          average_patients_per_doctor: number;
+        }>;
         
         if (response.success && response.data) {
-          setStatistics({
-            total_doctors: response.data.total_doctors,
-            active_doctors: response.data.active_doctors,
-            desactive_doctors: response.data.desactive_doctors,
-            suspendu_doctors: response.data.suspendu_doctors,
-            total_patients: response.data.total_patients,
-            average_patients_per_doctor: response.data.average_patients_per_doctor,
+          setStats({
+            totalPatients: response.data.total_patients,
+            criticalPatients: 0,
+            followUpRate: 0,
+            doctorsCount: response.data.total_doctors,
+            patientsByStage: {}
           });
         } else {
           console.error('Erreur:', response.message);
@@ -445,6 +447,22 @@ export default function AdminPage() {
     }
   };
   
+  // Fonction pour charger l'historique des connexions
+  const loadLoginHistory = async () => {
+    try {
+      const response = await fetchAPI('doctors/login-history', {}, true);
+      if (response.success && response.data) {
+        setLoginHistory(response.data);
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement de l\'historique des connexions:', error);
+    }
+  };
+
+  useEffect(() => {
+    loadLoginHistory();
+  }, []);
+
   // Handle add doctor
   const handleAddDoctor = async () => {
     try {
@@ -686,7 +704,7 @@ export default function AdminPage() {
   return (
     <div className="flex flex-col md:flex-row h-screen bg-gray-50">
       {/* Sidebar */}
-      <div className="w-full md:w-64 bg-indigo-900 text-white p-6 flex flex-col">
+      <div className="w-64 bg-indigo-900 text-white p-6 flex flex-col">
         <div className="flex items-center mb-10">
           <div className="bg-cyan-500 p-2 rounded-lg mr-3">
             <Settings className="h-6 w-6" />
@@ -694,57 +712,65 @@ export default function AdminPage() {
           <h1 className="text-xl font-bold">Administration</h1>
         </div>
         
-        <div className="flex items-center mb-6">
-          <div className="w-10 h-10 rounded-full bg-indigo-700 flex items-center justify-center mr-3">
-            <span className="font-bold text-white">
-              {currentUser?.first_name?.charAt(0)}{currentUser?.last_name?.charAt(0)}
-            </span>
-          </div>
-          <div>
-            <p className="font-medium text-white">{currentUser?.first_name} {currentUser?.last_name}</p>
-            <p className="text-xs text-indigo-200">Administrateur</p>
-          </div>
-        </div>
-        
-        <nav className="space-y-1 mb-10">
-          <button 
-            className={`w-full flex items-center px-4 py-2 text-sm rounded-lg ${activeTab === 'dashboard' ? 'bg-indigo-700 text-white' : 'text-indigo-100 hover:bg-indigo-800'}`}
-            onClick={() => setActiveTab('dashboard')}
-          >
-            <LayoutDashboard className="h-5 w-5 mr-3" />
-            Tableau de bord
-          </button>
-          <button 
-            className={`w-full flex items-center px-4 py-2 text-sm rounded-lg ${activeTab === 'doctors' ? 'bg-indigo-700 text-white' : 'text-indigo-100 hover:bg-indigo-800'}`}
-            onClick={() => setActiveTab('doctors')}
-          >
-            <Users className="h-5 w-5 mr-3" />
-            Médecins
-          </button>
-          <button 
-            className={`w-full flex items-center px-4 py-2 text-sm rounded-lg ${activeTab === 'loginHistory' ? 'bg-indigo-700 text-white' : 'text-indigo-100 hover:bg-indigo-800'}`}
-            onClick={() => setActiveTab('loginHistory')}
-          >
-            <Clock className="h-5 w-5 mr-3" />
-            Historique de connexion
-          </button>
-          <button 
-            className={`w-full flex items-center px-4 py-2 text-sm rounded-lg ${activeTab === 'settings' ? 'bg-indigo-700 text-white' : 'text-indigo-100 hover:bg-indigo-800'}`}
-            onClick={() => setActiveTab('settings')}
-          >
-            <Settings className="h-5 w-5 mr-3" />
-            Paramètres
-          </button>
+        <nav className="flex-1">
+          <ul className="space-y-4">
+            <li>
+              <button 
+                className={`w-full flex items-center p-3 ${activeTab === 'dashboard' ? 'bg-indigo-800' : 'hover:bg-indigo-800'} rounded-lg transition-colors`}
+                onClick={() => setActiveTab('dashboard')}
+              >
+                <LayoutDashboard className="mr-3 h-5 w-5" />
+                <span>Tableau de bord</span>
+              </button>
+            </li>
+            <li>
+              <button 
+                className={`w-full flex items-center p-3 ${activeTab === 'doctors' ? 'bg-indigo-800' : 'hover:bg-indigo-800'} rounded-lg transition-colors`}
+                onClick={() => setActiveTab('doctors')}
+              >
+                <Users className="mr-3 h-5 w-5" />
+                <span>Médecins</span>
+              </button>
+            </li>
+            <li>
+              <button 
+                className={`w-full flex items-center p-3 ${activeTab === 'loginHistory' ? 'bg-indigo-800' : 'hover:bg-indigo-800'} rounded-lg transition-colors`}
+                onClick={() => setActiveTab('loginHistory')}
+              >
+                <Clock className="mr-3 h-5 w-5" />
+                <span>Historique</span>
+              </button>
+            </li>
+            <li>
+              <button 
+                className={`w-full flex items-center p-3 ${activeTab === 'settings' ? 'bg-indigo-800' : 'hover:bg-indigo-800'} rounded-lg transition-colors`}
+                onClick={() => setActiveTab('settings')}
+              >
+                <Settings className="mr-3 h-5 w-5" />
+                <span>Paramètres</span>
+              </button>
+            </li>
+          </ul>
         </nav>
         
         <div className="mt-auto">
           <button 
             onClick={handleLogout}
-            className="w-full flex items-center px-4 py-2 text-sm rounded-lg text-indigo-100 hover:bg-indigo-800"
+            className="w-full flex items-center p-3 hover:bg-indigo-800 rounded-lg"
           >
-            <LogOut className="h-5 w-5 mr-3" />
-            Déconnexion
+            <LogOut className="mr-3 h-5 w-5" />
+            <span>Déconnexion</span>
           </button>
+          
+          <div className="flex items-center mt-6 p-3 bg-indigo-800 rounded-lg">
+            <div className="w-10 h-10 rounded-full bg-cyan-500 flex items-center justify-center mr-3">
+              <span className="font-bold">{currentUser?.first_name?.charAt(0)}{currentUser?.last_name?.charAt(0)}</span>
+            </div>
+            <div>
+              <p className="font-medium">{currentUser?.first_name} {currentUser?.last_name}</p>
+              <p className="text-xs text-gray-300">Administrateur</p>
+            </div>
+          </div>
         </div>
       </div>
       
@@ -771,12 +797,10 @@ export default function AdminPage() {
                     <Users className="h-6 w-6 text-indigo-600" />
                   </div>
                 </div> 
-                <p className="text-3xl font-bold text-gray-800">{statistics.total_doctors}</p>
+                <p className="text-3xl font-bold text-gray-800">{stats.doctorsCount}</p>
                 <p className="text-sm text-gray-500 mt-2">
-                  {statistics.active_doctors} actifs, {statistics.desactive_doctors} inactifs, {statistics.suspendu_doctors} suspendu
+                  {stats.doctorsCount} médecins
                 </p>
-                {/* <p className="text-3xl font-bold text-gray-800">{totalDoctors}</p>
-                <p className="text-sm text-gray-500 mt-2">{activeDoctors} actifs, {desactiveDoctors} inactifs</p> */}
               </div>
               
               <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
@@ -786,8 +810,8 @@ export default function AdminPage() {
                     <Activity className="h-6 w-6 text-green-600" />
                   </div>
                 </div>
-                <p className="text-3xl font-bold text-gray-800">{statistics.total_patients}</p>
-                <p className="text-sm text-gray-500 mt-2">Moy. {statistics.average_patients_per_doctor} patients par médecin</p>
+                <p className="text-3xl font-bold text-gray-800">{stats.totalPatients}</p>
+                <p className="text-sm text-gray-500 mt-2">Patients</p>
               </div>
               
               <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
@@ -829,14 +853,21 @@ export default function AdminPage() {
                       {loginHistory.slice(0, 5).map(login => (
                         <tr key={login.id}>
                           <td className="px-4 py-3 whitespace-nowrap">
-                            <p className="font-medium text-gray-800">{login.doctorName}</p>
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                            {new Date(login.timestamp).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                            <div className="flex items-center">
+                              <div className="ml-4">
+                                <div className="text-sm font-medium text-gray-900">{login.doctorName}</div>
+                                <div className="text-sm text-gray-500">{login.email}</div>
+                              </div>
+                            </div>
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
-                            <span className={`px-2 py-1 text-xs rounded-full ${login.status === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                              {login.status === 'success' ? 'Réussie' : 'Échouée'}
+                            <div className="text-sm text-gray-900">{new Date(login.timestamp).toLocaleString()}</div>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                              login.status === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                            }`}>
+                              {login.status === 'success' ? 'Succès' : 'Échec'}
                             </span>
                           </td>
                         </tr>
@@ -1167,10 +1198,10 @@ export default function AdminPage() {
                           {new Date(login.timestamp).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {login.device}
+                          {login.email}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {login.location}
+                          -
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`px-2 py-1 text-xs rounded-full ${login.status === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
@@ -1591,7 +1622,7 @@ export default function AdminPage() {
                     <h4 className="text-md font-medium text-gray-800 mb-4">Activité récente</h4>
                     <div className="space-y-3">
                       {loginHistory
-                        .filter(login => login.doctorId === selectedDoctor.id)
+                        .filter(login => login.doctorName === selectedDoctor.first_name + ' ' + selectedDoctor.last_name)
                         .slice(-3)
                         .reverse()
                         .map(login => (
@@ -1603,7 +1634,7 @@ export default function AdminPage() {
                                   {login.status === 'success' ? 'Connexion réussie' : 'Échec de connexion'}
                                 </p>
                                 <p className="text-xs text-gray-500">
-                                  {new Date(login.timestamp).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} • {login.device}
+                                  {new Date(login.timestamp).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} • {login.email}
                                 </p>
                               </div>
                             </div>
@@ -1612,7 +1643,7 @@ export default function AdminPage() {
                             </span>
                           </div>
                         ))}
-                      {loginHistory.filter(login => login.doctorId === selectedDoctor.id).length === 0 && (
+                      {loginHistory.filter(login => login.doctorName === selectedDoctor.first_name + ' ' + selectedDoctor.last_name).length === 0 && (
                         <p className="text-sm text-gray-500">Aucune activité récente</p>
                       )}
                     </div>

@@ -329,11 +329,11 @@ export default function Dashboard() {
           </Link>
           <div className="flex items-center mt-6 p-3 bg-indigo-800 rounded-lg">
             <div className="w-10 h-10 rounded-full bg-cyan-500 flex items-center justify-center mr-3">
-              <span className="font-bold">DR</span>
+              <span className="font-bold">{currentUser ? currentUser.first_name.charAt(0) + currentUser.last_name.charAt(0) : 'DR'}</span>
             </div>
             <div>
-              <p className="font-medium">{currentUser?.first_name} {currentUser?.last_name}</p>
-              <p className="text-xs text-gray-300">{currentUser?.role}</p>
+              <p className="font-medium">{currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'Chargement...'}</p>
+              <p className="text-xs text-gray-300">{currentUser ? currentUser.specialization || currentUser.role : ''}</p>
             </div>
             <button 
               onClick={handleLogout}

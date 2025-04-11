@@ -10,6 +10,10 @@ use App\Http\Controllers\API\AppointmentController;
 use App\Http\Controllers\API\ConsultationController;
 use App\Http\Controllers\API\PatientRecordController;
 use App\Http\Controllers\API\KidneyDiseaseStageController;
+use App\Http\Controllers\API\MedicalInfoController;
+use App\Http\Controllers\API\MedicalHistoryController;
+use App\Http\Controllers\API\ImagingTestController;
+use App\Http\Controllers\API\TNMClassificationController;
 
 /*
 |--------------------------------------------------------------------------
@@ -58,6 +62,22 @@ Route::middleware('auth:sanctum')->group(function () {
     // Routes pour les stades de maladie rénale
     Route::apiResource('kidney-disease-stages', KidneyDiseaseStageController::class);
     Route::post('/determine-stage', [KidneyDiseaseStageController::class, 'determineStageByGFR']);
+    
+    // Routes pour les informations médicales
+    Route::apiResource('medical-info', MedicalInfoController::class);
+    Route::get('/patients/{patientId}/medical-info', [MedicalInfoController::class, 'getByPatient']);
+    
+    // Routes pour les antécédents médicaux
+    Route::apiResource('medical-history', MedicalHistoryController::class);
+    Route::get('/patients/{patientId}/medical-history', [MedicalHistoryController::class, 'getByPatient']);
+    
+    // Routes pour les examens d'imagerie
+    Route::apiResource('imaging-tests', ImagingTestController::class);
+    Route::get('/patients/{patientId}/imaging-tests', [ImagingTestController::class, 'getByPatient']);
+    
+    // Routes pour la classification TNM
+    Route::apiResource('tnm-classification', TNMClassificationController::class);
+    Route::get('/patients/{patientId}/tnm-classification', [TNMClassificationController::class, 'getByPatient']);
 });
 
 // Route pour l'analyse de maladie rénale (accessible sans authentification pour les tests)

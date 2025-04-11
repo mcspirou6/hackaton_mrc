@@ -13,7 +13,7 @@ const API_BASE_URL = 'http://localhost:8000/api';
  * @param {boolean} withAuth - Inclure le token d'authentification
  * @returns {Promise<any>} - Données de réponse
  */
-async function fetchAPI(endpoint, options = {}, withAuth = false) {
+export async function fetchAPI(endpoint, options = {}, withAuth = false) {
   const url = `${API_BASE_URL}/${endpoint}`;
   
   const defaultOptions = {
@@ -34,13 +34,29 @@ async function fetchAPI(endpoint, options = {}, withAuth = false) {
   console.log('Fetching URL:', url, { ...defaultOptions, ...options });
   const response = await fetch(url, { ...defaultOptions, ...options });
   
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    console.error('API Error:', error);
-    throw new Error(error.message || `Erreur API: ${response.status}`);
+  // Récupérer le corps de la réponse
+  const responseText = await response.text();
+  let data;
+  
+  try {
+    // Essayer de parser la réponse comme du JSON
+    data = JSON.parse(responseText);
+  } catch (e) {
+    console.error('Erreur lors du parsing de la réponse JSON:', responseText);
+    throw new Error(`Réponse non-JSON du serveur: ${responseText.substring(0, 100)}...`);
   }
   
-  const data = await response.json();
+  if (!response.ok) {
+    console.error('API Error:', data);
+    if (data && data.message) {
+      throw new Error(data.message);
+    } else if (data && data.error) {
+      throw new Error(data.error);
+    } else {
+      throw new Error(`Erreur API: ${response.status}`);
+    }
+  }
+  
   console.log('API Response:', data);
   return data;
 }
@@ -212,23 +228,18 @@ export async function resetDoctorPassword(id, passwordData) {
 
 /**
  * Récupère les statistiques des médecins
+ * @returns {Promise<Object>} Statistiques des médecins
  */
-/**
- * @returns {Promise<{
-*   success: boolean,
-*   message?: string,
-*   data?: {
-*     total_doctors: number,
-*     active_doctors: number,
-*     desactive_doctors: number,
-*     suspendu_doctors: number,
-*     total_patients: number,
-*     average_patients_per_doctor: number
-*   }
-* }>}
-*/
 export async function getDoctorStatistics() {
- return fetchAPI('doctors/statistics', {}, true);
+  return fetchAPI('doctors/statistics', {}, true);
+}
+
+/**
+ * Récupère les statistiques globales des patients
+ * @returns {Promise<Object>} Statistiques globales
+ */
+export async function getGlobalStatistics() {
+  return fetchAPI('patients', {}, true);
 }
 
 // ===== PATIENTS =====
@@ -256,10 +267,31 @@ export async function getPatientById(id) {
  * @returns {Promise<Object>} Patient créé
  */
 export async function createPatient(patientData) {
-  return fetchAPI('patients', {
-    method: 'POST',
-    body: JSON.stringify(patientData),
-  }, true);
+  try {
+    const response = await fetchAPI('patients', {
+      method: 'POST',
+      body: JSON.stringify(patientData),
+    }, true);
+
+    // La réponse est déjà parsée par fetchAPI
+    if (!response.success) {
+      console.error('Erreur de création:', response.message);
+      throw new Error(response.message || 'Échec de la création du patient');
+    }
+
+    return {
+      success: true,
+      data: response.data || response,
+      message: 'Patient créé avec succès'
+    };
+
+  } catch (error) {
+    console.error('Erreur détaillée:', error);
+    return {
+      success: false,
+      message: error.message || 'Une erreur inattendue s\'est produite'
+    };
+  }
 }
 
 /**
@@ -281,9 +313,26 @@ export async function updatePatient(id, patientData) {
  * @returns {Promise<Object>} Message de confirmation
  */
 export async function deletePatient(id) {
-  return fetchAPI(`patients/${id}`, {
-    method: 'DELETE',
-  }, true);
+  try {
+    const response = await fetchAPI(`patients/${id}`, {
+      method: 'DELETE',
+    }, true);
+
+    if (!response.success) {
+      throw new Error(response.message || 'Erreur lors de la suppression du patient');
+    }
+
+    return {
+      success: true,
+      message: 'Patient supprimé avec succès'
+    };
+  } catch (error) {
+    console.error('Erreur lors de la suppression du patient:', error);
+    return {
+      success: false,
+      message: error.message || 'Une erreur est survenue lors de la suppression du patient'
+    };
+  }
 }
 
 // ===== RENDEZ-VOUS =====
@@ -548,4 +597,211 @@ export async function analyzeKidneyDisease(data) {
     method: 'POST',
     body: JSON.stringify(data),
   });
+}
+
+// ===== INFORMATIONS MÉDICALES =====
+
+/**
+ * Crée des informations médicales pour un patient
+ * @param {Object} medicalInfoData - Données médicales
+ * @returns {Promise<Object>} Informations médicales créées
+ */
+export async function createMedicalInfo(medicalInfoData) {
+  try {
+    // Validation des données requises
+    if (!medicalInfoData.patient_id || !medicalInfoData.user_id || !medicalInfoData.kidney_disease_stage_id) {
+      throw new Error('Données requises manquantes');
+    }
+
+    // Nettoyage et conversion des données
+    const cleanedData = {
+      patient_id: Number(medicalInfoData.patient_id),
+      user_id: Number(medicalInfoData.user_id),
+      kidney_disease_stage_id: Number(medicalInfoData.kidney_disease_stage_id),
+      diagnosis_date: medicalInfoData.diagnosis_date || new Date().toISOString().split('T')[0],
+      notes: medicalInfoData.notes || "",
+      on_dialysis: Boolean(medicalInfoData.on_dialysis),
+      dialysis_start_date: medicalInfoData.dialysis_start_date || null,
+      current_treatment: medicalInfoData.current_treatment || "",
+      blood_type: medicalInfoData.blood_type || "",
+      creatinine_level: medicalInfoData.creatinine_level === '' ? null : 
+                       medicalInfoData.creatinine_level === undefined ? null : 
+                       Number(medicalInfoData.creatinine_level),
+      gfr: medicalInfoData.gfr === '' ? null : 
+           medicalInfoData.gfr === undefined ? null : 
+           Number(medicalInfoData.gfr),
+      albuminuria: medicalInfoData.albuminuria === '' ? null : 
+                  medicalInfoData.albuminuria === undefined ? null : 
+                  Number(medicalInfoData.albuminuria),
+      blood_pressure_systolic: medicalInfoData.blood_pressure_systolic === '' ? null : 
+                              medicalInfoData.blood_pressure_systolic === undefined ? null : 
+                              Number(medicalInfoData.blood_pressure_systolic),
+      blood_pressure_diastolic: medicalInfoData.blood_pressure_diastolic === '' ? null : 
+                               medicalInfoData.blood_pressure_diastolic === undefined ? null : 
+                               Number(medicalInfoData.blood_pressure_diastolic),
+      potassium_level: medicalInfoData.potassium_level === '' ? null : 
+                      medicalInfoData.potassium_level === undefined ? null : 
+                      Number(medicalInfoData.potassium_level),
+      hemoglobin_level: medicalInfoData.hemoglobin_level === '' ? null : 
+                       medicalInfoData.hemoglobin_level === undefined ? null : 
+                       Number(medicalInfoData.hemoglobin_level)
+    };
+
+    console.log('Données médicales nettoyées avant envoi:', cleanedData); // Debug
+
+    const response = await fetchAPI('medical-info', {
+      method: 'POST',
+      body: JSON.stringify(cleanedData),
+    }, true);
+
+    if (!response.success) {
+      console.error('Erreur API:', response); // Debug
+      throw new Error(response.message || 'Erreur lors de la création des informations médicales');
+    }
+
+    return response;
+  } catch (error) {
+    console.error('Erreur lors de la création des informations médicales:', error);
+    throw error;
+  }
+}
+
+/**
+ * Récupère les informations médicales d'un patient
+ * @param {number} patientId - ID du patient
+ * @returns {Promise<Object>} Informations médicales
+ */
+export async function getMedicalInfo(patientId) {
+  return fetchAPI(`patients/${patientId}/medical-info`, {}, true);
+}
+
+/**
+ * Met à jour les informations médicales
+ * @param {number} id - ID des informations médicales
+ * @param {Object} medicalInfoData - Nouvelles données médicales
+ * @returns {Promise<Object>} Informations médicales mises à jour
+ */
+export async function updateMedicalInfo(id, medicalInfoData) {
+  return fetchAPI(`medical-info/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(medicalInfoData),
+  }, true);
+}
+
+// ===== ANTÉCÉDENTS MÉDICAUX =====
+
+/**
+ * Crée un enregistrement d'antécédents médicaux pour un patient
+ * @param {Object} medicalHistoryData - Données d'antécédents médicaux
+ * @returns {Promise<Object>} Antécédents médicaux créés
+ */
+export async function createMedicalHistory(medicalHistoryData) {
+  return fetchAPI('medical-history', {
+    method: 'POST',
+    body: JSON.stringify(medicalHistoryData),
+  }, true);
+}
+
+/**
+ * Récupère les antécédents médicaux d'un patient
+ * @param {number} patientId - ID du patient
+ * @returns {Promise<Object>} Antécédents médicaux
+ */
+export async function getMedicalHistory(patientId) {
+  return fetchAPI(`patients/${patientId}/medical-history`, {}, true);
+}
+
+/**
+ * Met à jour les antécédents médicaux
+ * @param {number} id - ID des antécédents médicaux
+ * @param {Object} medicalHistoryData - Nouvelles données d'antécédents
+ * @returns {Promise<Object>} Antécédents médicaux mis à jour
+ */
+export async function updateMedicalHistory(id, medicalHistoryData) {
+  return fetchAPI(`medical-history/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(medicalHistoryData),
+  }, true);
+}
+
+// ===== EXAMENS D'IMAGERIE =====
+
+/**
+ * Crée un enregistrement d'examens d'imagerie pour un patient
+ * @param {Object} imagingTestsData - Données d'examens d'imagerie
+ * @returns {Promise<Object>} Examens d'imagerie créés
+ */
+export async function createImagingTests(imagingTestsData) {
+  return fetchAPI('imaging-tests', {
+    method: 'POST',
+    body: JSON.stringify(imagingTestsData),
+  }, true);
+}
+
+/**
+ * Récupère les examens d'imagerie d'un patient
+ * @param {number} patientId - ID du patient
+ * @returns {Promise<Object>} Examens d'imagerie
+ */
+export async function getImagingTests(patientId) {
+  return fetchAPI(`patients/${patientId}/imaging-tests`, {}, true);
+}
+
+/**
+ * Met à jour les examens d'imagerie
+ * @param {number} id - ID des examens d'imagerie
+ * @param {Object} imagingTestsData - Nouvelles données d'examens
+ * @returns {Promise<Object>} Examens d'imagerie mis à jour
+ */
+export async function updateImagingTests(id, imagingTestsData) {
+  return fetchAPI(`imaging-tests/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(imagingTestsData),
+  }, true);
+}
+
+// ===== CLASSIFICATION TNM =====
+
+/**
+ * Crée un enregistrement de classification TNM pour un patient
+ * @param {Object} tnmClassificationData - Données de classification TNM
+ * @returns {Promise<Object>} Classification TNM créée
+ */
+export async function createTNMClassification(tnmClassificationData) {
+  return fetchAPI('tnm-classification', {
+    method: 'POST',
+    body: JSON.stringify(tnmClassificationData),
+  }, true);
+}
+
+/**
+ * Récupère la classification TNM d'un patient
+ * @param {number} patientId - ID du patient
+ * @returns {Promise<Object>} Classification TNM
+ */
+export async function getTNMClassification(patientId) {
+  return fetchAPI(`patients/${patientId}/tnm-classification`, {}, true);
+}
+
+/**
+ * Met à jour la classification TNM
+ * @param {number} id - ID de la classification TNM
+ * @param {Object} tnmClassificationData - Nouvelles données de classification
+ * @returns {Promise<Object>} Classification TNM mise à jour
+ */
+export async function updateTNMClassification(id, tnmClassificationData) {
+  return fetchAPI(`tnm-classification/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(tnmClassificationData),
+  }, true);
+}
+
+/**
+ * Récupère les statistiques du tableau de bord
+ * @returns {Promise<Object>} Statistiques
+ */
+export async function getDashboardStats() {
+  return fetchAPI('dashboard/stats', {
+    method: 'GET'
+  }, true);
 }
