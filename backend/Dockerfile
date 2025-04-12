@@ -12,7 +12,8 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 COPY . /var/www/html/
 
 # Définir le répertoire de travail
-WORKDIR /var/www/html/backend
+WORKDIR /var/www/html
+
 
 # Installer les dépendances Laravel
 RUN composer install --no-dev --optimize-autoloader \
