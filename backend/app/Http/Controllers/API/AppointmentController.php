@@ -2,6 +2,10 @@
 
 namespace App\Http\Controllers\API;
 
+use App\Mail\AppointmentCreated;
+use App\Mail\AppointmentPatient;
+use Illuminate\Support\Facades\Mail;
+
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
 use App\Models\Patient;
@@ -143,13 +147,53 @@ class AppointmentController extends Controller
         // Créer le rendez-vous
         $appointment = Appointment::create($validated);
 
+        // Associer le médecin (si nécessaire)
+        $doctor = User::where('role', 'medecin')->first();  // ou récupérer le médecin via son ID
+        $appointment->user_id = $doctor->id;
+        $appointment->save();
+
+        // Charger le médecin
+        $appointment->load('doctor');
+        //dd($appointment->doctor);
+
+        if ($appointment->doctor && $appointment->doctor->role === 'medecin') {
+            // Envoie l'email au médecin
+            Mail::to($appointment->doctor->email)->send(new AppointmentCreated($appointment));
+        } else {
+            // Gérer le cas où le médecin n'a pas d'email ou son rôle n'est pas 'medecin'
+            return response()->json([
+                'success' => false,
+                'message' => 'Le médecin n\'a pas d\'email associé ou son rôle est incorrect.',
+            ], 400);
+        }
+
+        // Vérifier et envoyer l'email au patient
+
+        $patient = $appointment->patient;
+
+        // Rechercher le User correspondant au Patient
+        $patientUser = User::where('first_name', $patient->first_name)
+                        ->where('last_name', $patient->last_name)
+                        ->where('role', 'patient')
+                        ->first();
+
+        if ($patientUser && $patientUser->email) {
+            Mail::to($patientUser->email)->send(new AppointmentPatient($appointment));
+        }else {
+            return response()->json([
+                'success' => false,
+                'message' => 'Le patient n\'a pas d\'email associé ou son rôle est incorrect.',
+            ], 400);
+        }
+
         // Récupérer le patient et le médecin pour la réponse
         $patient = Patient::find($validated['patient_id']);
         $doctor = User::find($validated['user_id']);
 
+
         return response()->json([
             'success' => true,
-            'message' => 'Rendez-vous créé avec succès',
+            'message' => 'Rendez-vous créé avec succès et email envoyé.',
             'data' => [
                 'id' => $appointment->id,
                 'patientName' => $patient->first_name . ' ' . $patient->last_name,
@@ -252,6 +296,45 @@ class AppointmentController extends Controller
         // Mise à jour
         $appointment->update($validated);
         $appointment->refresh();
+
+        // Associer le médecin (si nécessaire)
+        $doctor = User::where('role', 'medecin')->first();  // ou récupérer le médecin via son ID
+        $appointment->user_id = $doctor->id;
+        $appointment->save();
+
+        // Charger le médecin
+        $appointment->load('doctor');
+        //dd($appointment->doctor);
+
+        if ($appointment->doctor && $appointment->doctor->role === 'medecin') {
+            // Envoie l'email au médecin
+            Mail::to($appointment->doctor->email)->send(new AppointmentCreated($appointment));
+        } else {
+            // Gérer le cas où le médecin n'a pas d'email ou son rôle n'est pas 'medecin'
+            return response()->json([
+                'success' => false,
+                'message' => 'Le médecin n\'a pas d\'email associé ou son rôle est incorrect.',
+            ], 400);
+        }
+
+        // Vérifier et envoyer l'email au patient
+
+        $patient = $appointment->patient;
+
+        // Rechercher le User correspondant au Patient
+        $patientUser = User::where('first_name', $patient->first_name)
+                        ->where('last_name', $patient->last_name)
+                        ->where('role', 'patient')
+                        ->first();
+
+        if ($patientUser && $patientUser->email) {
+            Mail::to($patientUser->email)->send(new AppointmentPatient($appointment));
+        }else {
+            return response()->json([
+                'success' => false,
+                'message' => 'Le patient n\'a pas d\'email associé ou son rôle est incorrect.',
+            ], 400);
+        }
 
         $patient = $appointment->patient;
         $doctor = $appointment->user;

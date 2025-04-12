@@ -21,7 +21,7 @@ return new class extends Migration
             $table->string('password');
             $table->string('license_number')->nullable()->comment('Numéro de licence médicale');
             $table->string('specialization')->nullable()->comment('Néphrologie, médecine générale, etc.');
-            $table->string('role', 20)->default('patient')->comment('medecin, admin, patient');
+            $table->string('role', 20)->default('medecin')->comment('medecin, admin, patient');
             $table->enum('status', ['actif', 'suspendu', 'desactive'])->default('actif');
             $table->rememberToken();
             $table->timestamps();

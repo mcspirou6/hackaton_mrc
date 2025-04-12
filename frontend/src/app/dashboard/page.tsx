@@ -34,7 +34,7 @@ import {
   Clock,
   LogOut
 } from "lucide-react";
-import { getCurrentUser, getPatients, getAppointments, getKidneyDiseaseStages, logout } from "@/api/api";
+import { getCurrentUser, getPatients, getAppointments, getKidneyDiseaseStages, getPatientsStatistics, logout } from "@/api/api";
 
 // Types
 interface ApiResponse<T> {
@@ -119,6 +119,12 @@ interface KidneyDiseaseStage {
   updated_at: string;
 }
 
+interface StatisticsData {
+  total_patients_medecin: number;
+  total_rendez_vous: number;
+  total_patients_critiques: number;
+}
+
 export default function Dashboard() {
   const router = useRouter();
   // États
@@ -140,8 +146,36 @@ export default function Dashboard() {
   const [currentMonth, setCurrentMonth] = useState("Mars 2025");
   const [selectedDay, setSelectedDay] = useState(31);
 
+  const [statistics, setStatistics] = useState({
+      total_patients_medecin: 0,
+      total_rendez_vous: 0,
+      total_patients_critiques: 0,
+    });
+  
+
+
+  // Fonction pour charger les statistiques
+      const loadStatistics = async () => {
+        try {
+          const response = await getPatientsStatistics();
+          
+          if (response.success && response.data) {
+            setStatistics({
+              total_patients_medecin: response.data.total_patients_medecin,
+              total_rendez_vous: response.data.total_rendez_vous,
+              total_patients_critiques: response.data.total_patients_critiques,
+            });
+          } else {
+            console.error('Erreur:', response.message);
+          }
+        } catch (error) {
+          console.error('Erreur de chargement:', error);
+        }
+      };
+
   // Vérifier l'authentification et charger les données
   useEffect(() => {
+    loadStatistics();
     const token = localStorage.getItem('auth_token');
     if (!token) {
       router.push('/');
@@ -376,7 +410,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-500 text-sm font-medium">Total Patients</p>
-                  <h3 className="text-3xl font-bold text-gray-800 mt-1">{patients.length}</h3>
+                  <h3 className="text-3xl font-bold text-gray-800 mt-1">{statistics.total_patients_medecin}</h3>
                 </div>
                 <div className="bg-indigo-100 p-3 rounded-lg">
                   <Users className="h-6 w-6 text-indigo-600" />
@@ -393,7 +427,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-500 text-sm font-medium">Rendez-vous aujourd'hui</p>
-                  <h3 className="text-3xl font-bold text-gray-800 mt-1">{appointments.length}</h3>
+                  <h3 className="text-3xl font-bold text-gray-800 mt-1">{statistics.total_rendez_vous}</h3>
                 </div>
                 <div className="bg-blue-100 p-3 rounded-lg">
                   <Calendar className="h-6 w-6 text-blue-600" />
@@ -410,8 +444,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-500 text-sm font-medium">Patients critiques</p>
-                  <h3 className="text-3xl font-bold text-gray-800 mt-1">
-                    {patients.filter(p => p.status === "Critique").length}
+                  <h3 className="text-3xl font-bold text-gray-800 mt-1">{statistics.total_patients_critiques}
                   </h3>
                 </div>
                 <div className="bg-red-100 p-3 rounded-lg">
