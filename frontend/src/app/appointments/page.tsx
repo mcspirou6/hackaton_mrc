@@ -27,6 +27,7 @@ import {
   X,
   Eye
 } from "lucide-react";
+import NotificationBell from "@/components/NotificationBell";
 import {
   getAppointments,
   createAppointment,
@@ -35,6 +36,10 @@ import {
   getPatients,
   getDoctors
 } from "@/api/api";
+import { 
+  sendAppointmentConfirmationEmail, 
+  scheduleAppointmentReminders 
+} from "@/api/emailService";
 
 // Types pour les réponses de l'API
 interface AppointmentResponse {
@@ -124,6 +129,7 @@ export default function Appointments() {
   const [currentAppointment, setCurrentAppointment] = useState<Appointment | null>(null);
   const [showAppointmentDetails, setShowAppointmentDetails] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
   
   const [newAppointment, setNewAppointment] = useState<Partial<Appointment>>({
     patientId: 1,
@@ -360,6 +366,7 @@ const transformAppointments = (apiAppointments: AppointmentResponse[]): Appointm
       };
     
       let response: { data: AppointmentResponse };
+      let isNewAppointment = false;
     
       if (currentAppointment) {
         response = await updateAppointment(currentAppointment.id, appointmentData);
@@ -367,8 +374,48 @@ const transformAppointments = (apiAppointments: AppointmentResponse[]): Appointm
           appt.id === currentAppointment.id ? transformAppointments([response.data])[0] : appt
         ));
       } else {
+        isNewAppointment = true;
         response = await createAppointment(appointmentData);
         setAppointments([...appointments, transformAppointments([response.data])[0]]);
+      }
+
+      // Récupérer l'email du patient (en supposant qu'il est disponible dans l'objet patient)
+      const patientEmail = patient.email || '';
+      
+      // Préparer les détails du rendez-vous pour l'email
+      const appointmentDetails = {
+        doctor_name: doctor.name,
+        patient_name: `${patient.first_name} ${patient.last_name}`,
+        date: newAppointment.date,
+        time: newAppointment.time,
+        duration: newAppointment.duration,
+        type: newAppointment.type,
+        location: 'Cabinet médical', // À adapter selon votre contexte
+        notes: newAppointment.notes || ''
+      };
+
+      // Si c'est un nouveau rendez-vous, envoyer l'email de confirmation et planifier les rappels
+      if (isNewAppointment && patientEmail) {
+        try {
+          // Envoyer l'email de confirmation
+          await sendAppointmentConfirmationEmail(
+            response.data.id,
+            patientEmail,
+            appointmentDetails
+          );
+          
+          // Planifier les rappels (24h, 1h, 30min avant)
+          await scheduleAppointmentReminders(
+            response.data.id,
+            patientEmail,
+            appointmentDetails
+          );
+          
+          toast.success('Email de confirmation envoyé et rappels programmés');
+        } catch (emailError) {
+          console.error('Erreur lors de l\'envoi des notifications par email:', emailError);
+          toast.warning('Le rendez-vous a été créé mais l\'envoi d\'email a échoué');
+        }
       }
       
       setShowSuccessAlert(true);
@@ -380,7 +427,7 @@ const transformAppointments = (apiAppointments: AppointmentResponse[]): Appointm
       if (error instanceof Error) {
         errorMessage += `: ${error.message}`;
       }
-      alert(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setIsActionLoading(false);
     }
@@ -562,10 +609,7 @@ const transformAppointments = (apiAppointments: AppointmentResponse[]): Appointm
               />
               <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
             </div>
-            <button className="relative p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors">
-              <Bell className="h-5 w-5 text-gray-600" />
-              <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full"></span>
-            </button>
+            <NotificationBell onNotificationsUpdate={(count) => setNotificationCount(count)} />
           </div>
         </header>
         

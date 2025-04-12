@@ -14,6 +14,7 @@ use App\Http\Controllers\API\MedicalInfoController;
 use App\Http\Controllers\API\MedicalHistoryController;
 use App\Http\Controllers\API\ImagingTestController;
 use App\Http\Controllers\API\TNMClassificationController;
+use App\Http\Controllers\API\ReportController;
 
 /*
 |--------------------------------------------------------------------------
@@ -78,6 +79,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // Routes pour la classification TNM
     Route::apiResource('tnm-classification', TNMClassificationController::class);
     Route::get('/patients/{patientId}/tnm-classification', [TNMClassificationController::class, 'getByPatient']);
+    
+    // Routes pour les rapports
+    Route::apiResource('reports', ReportController::class);
+    Route::get('/patients/{patientId}/reports', [ReportController::class, 'getByPatient']);
+    Route::get('/reports/{id}/download', [ReportController::class, 'download']);
 });
 
 // Route pour l'analyse de maladie rénale (accessible sans authentification pour les tests)

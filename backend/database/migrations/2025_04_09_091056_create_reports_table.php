@@ -20,6 +20,10 @@ return new class extends Migration
             $table->string('author', 100);
             $table->enum('status', ['Généré', 'En cours', 'Programmé']);
             $table->enum('format', ['PDF', 'Excel', 'CSV']);
+            $table->foreignId('patient_id')->nullable()->constrained('patients')->onDelete('cascade');
+            $table->foreignId('user_id')->nullable()->constrained('users')->onDelete('set null');
+            $table->json('content')->nullable(); // Contenu du rapport en JSON
+            $table->string('file_path')->nullable(); // Chemin vers le fichier PDF généré
             $table->timestamps(); // created_at & updated_at
         });
     }
