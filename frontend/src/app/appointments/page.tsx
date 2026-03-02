@@ -199,8 +199,8 @@ export default function Appointments() {
           search: searchTerm || undefined,
         };
 
-        const appointmentsResponse = await getAppointments(filters);
-        const transformedAppointments = transformAppointments(appointmentsResponse.data);
+        const appointmentsResponse = (await getAppointments(filters)) as { data?: unknown[] };
+        const transformedAppointments = transformAppointments(appointmentsResponse.data ?? []);
         setAppointments(transformedAppointments);
       } catch (error) {
         console.error('Erreur lors de la récupération des données:', error);
