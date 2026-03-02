@@ -176,15 +176,19 @@ export default function Appointments() {
       try {
         setIsLoading(true);
 
-        const patientsResponse = await getPatients();
-        const doctorsResponse = await getDoctors();
-        setPatients(patientsResponse.data);
-        setDoctors(doctorsResponse.data);
+        const patientsResponse = (await getPatients()) as { data?: unknown };
+        const doctorsResponse = (await getDoctors()) as { data?: unknown };
+        const patientsList = Array.isArray((patientsResponse.data as { data?: unknown[] })?.data)
+          ? (patientsResponse.data as { data: unknown[] }).data
+          : (Array.isArray(patientsResponse.data) ? patientsResponse.data : []);
+        const doctorsList = Array.isArray(doctorsResponse.data) ? doctorsResponse.data : [];
+        setPatients(patientsList as Patient[]);
+        setDoctors(doctorsList as Doctor[]);
 
         setNewAppointment(prev => ({
           ...prev,
-          patientId: patientsResponse.data[0]?.id || 1,
-          doctor: doctorsResponse.data[0]?.id.toString() || "",
+          patientId: (patientsList[0] as { id?: number })?.id ?? 1,
+          doctor: (doctorsList[0] as { id?: number })?.id?.toString() ?? "",
         }));
 
         const filters = {
