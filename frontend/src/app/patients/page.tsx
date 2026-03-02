@@ -274,6 +274,30 @@ export default function Patients() {
   // État pour les notifications
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
   
+  // Fonction pour charger les patients
+  const fetchPatients = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('http://localhost:8000/api/patients');
+      if (!response.ok) {
+        throw new Error('Erreur lors du chargement des patients');
+      }
+      const data = await response.json();
+      setPatients(data);
+      setError("");
+    } catch (err) {
+      setError("Erreur lors du chargement des patients");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Charger les patients au montage du composant
+  useEffect(() => {
+    fetchPatients();
+  }, []);
+
   // Liste des médecins disponibles
   const [doctors, setDoctors] = useState<Doctor[]>([
     {
@@ -1057,10 +1081,15 @@ export default function Patients() {
         // Appeler l'API pour récupérer les patients
         const response = await getPatients();
         
+        console.log('Réponse API patients:', response);
         // Vérifier si la réponse contient des données
-        if (response && typeof response === 'object' && ('success' in response) && response.success && ('data' in response) && Array.isArray(response.data)) {
+        if (response && typeof response === 'object') {
+          // Déterminer où se trouvent les données des patients dans la réponse
+          const patientsArray = Array.isArray(response.data) ? response.data : 
+                              Array.isArray(response) ? response : 
+                              Array.isArray(response.patients) ? response.patients : [];
           // Transformer les données pour correspondre à notre interface Patient
-          const patientsData = await Promise.all((response.data as any[]).map(async (patient: any) => {
+          const patientsData = await Promise.all(patientsArray.map(async (patient: any) => {
             // Créer un objet patient avec les propriétés de base
             const patientObj: Patient = {
               id: patient.id,
@@ -1133,6 +1162,7 @@ export default function Patients() {
           setPatients(patientsData);
         } else {
           console.error('Erreur lors du chargement des patients:', response);
+          setError("Impossible de charger la liste des patients. Veuillez réessayer plus tard.");
         }
       } catch (error) {
         console.error('Erreur lors du chargement des patients:', error);

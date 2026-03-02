@@ -148,29 +148,26 @@ export default function Reports() {
           setCurrentUser(userResponse.user);
         }
         
-        // Charger la liste des patients directement en utilisant fetch
+        // Charger la liste des patients en utilisant la fonction getPatients de l'API
         try {
-          const token = localStorage.getItem('auth_token');
-          const response = await fetch('http://localhost:8000/api/patients', {
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-              'Authorization': `Bearer ${token}`
-            }
-          });
+          const { getPatients } = await import('@/api/api');
+          const patientsResponse = await getPatients();
+          console.log("Réponse API patients:", patientsResponse);
           
-          const data = await response.json() as { success: boolean; data: Patient[] };
-          console.log("Réponse API patients directe:", data);
-          
-          if (data.success && Array.isArray(data.data)) {
-            setPatients(data.data);
-            console.log(`${data.data.length} patients chargés avec succès`);
+          if (patientsResponse && typeof patientsResponse === 'object' && 'success' in patientsResponse && patientsResponse.success) {
+            // Vérifier si les données sont dans data ou directement dans la réponse
+            const patientsData = 'data' in patientsResponse && Array.isArray(patientsResponse.data) 
+              ? patientsResponse.data 
+              : Array.isArray(patientsResponse) ? patientsResponse : [];
+            
+            setPatients(patientsData);
+            console.log(`${patientsData.length} patients chargés avec succès`);
           } else {
-            console.error("Format de réponse patients incorrect:", data);
+            console.error("Format de réponse patients incorrect:", patientsResponse);
             setPatients([]);
           }
         } catch (apiError) {
-          console.error("Erreur lors de l'appel direct à l'API patients:", apiError);
+          console.error("Erreur lors de l'appel à l'API patients:", apiError);
           
           // Données de secours en cas d'erreur
           const mockPatients = [
