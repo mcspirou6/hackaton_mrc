@@ -3,9 +3,14 @@
  * Ce fichier contient toutes les fonctions nécessaires pour interagir avec l'API
  */
 
-// URL de base de l'API
-// En production, configurée via NEXT_PUBLIC_API_URL (Netlify)
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+// URL de base de l'API (résolue au chargement pour prendre en compte le domaine en prod)
+function getApiBaseUrl() {
+  if (typeof window !== 'undefined' && window.location.origin === 'https://papaya-gingersnap-16f8ec.netlify.app') {
+    return 'https://hackatonmrc-production.up.railway.app/api';
+  }
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+}
+const API_BASE_URL = getApiBaseUrl();
 
 /**
  * Fonction utilitaire pour effectuer des requêtes API
