@@ -3,8 +3,9 @@
  * Ce fichier contient toutes les fonctions nécessaires pour interagir avec l'API
  */
 
-// URL de base de l'API, à configurer dans .env.local
-const API_BASE_URL = 'http://localhost:8000/api';
+// URL de base de l'API
+// En production, configurée via NEXT_PUBLIC_API_URL (Netlify)
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
 /**
  * Fonction utilitaire pour effectuer des requêtes API
