@@ -59,7 +59,7 @@ export default function Alerts() {
     const fetchUserData = async () => {
       try {
         const { getCurrentUser } = await import('@/api/api');
-        const userResponse = await getCurrentUser();
+        const userResponse = (await getCurrentUser()) as { success?: boolean; user?: unknown };
         if (userResponse.success) {
           setCurrentUser(userResponse.user);
         }
