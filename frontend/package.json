@@ -9,7 +9,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "postinstall": "node -e \"if(process.platform==='linux'&&process.arch==='x64'){require('child_process').execSync('npm install @tailwindcss/oxide-linux-x64-gnu@4.1.1 --no-save',{stdio:'inherit'})}\""
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.7",
