@@ -1,9 +1,10 @@
 [build]
-  command = "npm run build"
+  command = "npm ci && npm rebuild lightningcss && npm run build"
   publish = ".next"
 
 [build.environment]
-  NEXT_PUBLIC_API_URL = "https://mrc-backend.up.railway.app/api"
+  NEXT_PUBLIC_API_URL = "https://hackatonmrc-production.up.railway.app/api"
+  NODE_VERSION = "20"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
